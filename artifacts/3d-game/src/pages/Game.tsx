@@ -14,31 +14,36 @@ import { HUD } from "@/components/ui/HUD";
 import { MenuScreen } from "@/components/ui/MenuScreen";
 import { GameOverScreen } from "@/components/ui/GameOverScreen";
 
-/** Smooth camera that sits close behind/above the character, rises during jumps */
+/**
+ * Camera sits higher and closer than before, uses lookAt so you always
+ * see the track well ahead of the character.
+ * Rises slightly when the player jumps for a sense of height.
+ */
 function CameraRig({ isJumping, speed }: { isJumping: boolean; speed: number }) {
   const { camera } = useThree();
-  const camYRef = useRef(2.2);
+  const camYRef = useRef(4.4);
 
   useEffect(() => {
-    camera.position.set(0, 2.2, 4.6);
-    camera.rotation.set(-0.14, 0, 0);
+    camera.position.set(0, 4.4, 4.4);
     const pc = camera as THREE.PerspectiveCamera;
-    pc.fov  = 76;
+    pc.fov  = 72;
     pc.near = 0.1;
     pc.far  = 1000;
     pc.updateProjectionMatrix();
+    camera.lookAt(0, 0.5, -10);
   }, [camera]);
 
   useFrame((_, delta) => {
-    // Camera rises a little when player jumps — gives sense of height
-    const targetY = isJumping ? 3.0 : 2.2;
+    const targetY = isJumping ? 5.0 : 4.4;
     camYRef.current += (targetY - camYRef.current) * Math.min(1, delta * 5);
     camera.position.y = camYRef.current;
+    // lookAt a fixed world point so the view always shows what's ahead
+    camera.lookAt(0, 0.5, -10);
 
-    // Slight FOV swell as speed increases — feels faster
+    // FOV widens slightly at high speed for a rush feeling
     const pc = camera as THREE.PerspectiveCamera;
-    const targetFov = 76 + (speed - 8) * 0.6;
-    pc.fov += (Math.min(88, targetFov) - pc.fov) * Math.min(1, delta * 2);
+    const targetFov = 72 + (speed - 8) * 0.5;
+    pc.fov += (Math.min(84, targetFov) - pc.fov) * Math.min(1, delta * 2);
     pc.updateProjectionMatrix();
   });
 
@@ -55,7 +60,9 @@ interface GameSceneProps {
   isHit: boolean;
 }
 
-function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, onJumpComplete, isHit }: GameSceneProps) {
+function GameScene({
+  onHit, onCoin, onTrainHorn, isJumping, isSliding, onJumpComplete, isHit,
+}: GameSceneProps) {
   const { gameState, speed, lane } = useGameStore();
   const playing = gameState === "playing";
 
@@ -66,14 +73,21 @@ function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, onJumpCom
       <directionalLight position={[5, 14, 8]} intensity={3.5} color="#FFF8E0" castShadow={false} />
       <directionalLight position={[-4, 8, 6]} intensity={1.8} color="#FFFFFF" castShadow={false} />
       <hemisphereLight args={["#87CEEB", "#90EE90", 1.2]} />
-      <CameraRig isJumping={isJumping} speed={speed} />
 
+      <CameraRig isJumping={isJumping} speed={speed} />
       <Environment speed={speed} playing={playing} />
       <Track speed={speed} playing={playing} />
 
-      <Character lane={lane} isJumping={isJumping} isSliding={isSliding} isHit={isHit} onJumpComplete={onJumpComplete} />
+      <Character
+        lane={lane}
+        isJumping={isJumping}
+        isSliding={isSliding}
+        isHit={isHit}
+        onJumpComplete={onJumpComplete}
+      />
 
-      <Police playerLane={lane} playing={playing} speed={speed} />
+      {/* Police appears briefly at game start then disappears */}
+      <Police playerLane={lane} playing={playing} />
 
       <Obstacles
         speed={speed}
@@ -95,26 +109,6 @@ function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, onJumpCom
   );
 }
 
-function TrainWarning({ visible }: { visible: boolean }) {
-  if (!visible) return null;
-  return (
-    <div style={{
-      position: "absolute", top: "50%", left: "50%",
-      transform: "translate(-50%, -50%)",
-      background: "rgba(200,0,0,0.85)",
-      color: "#fff", fontFamily: "system-ui", fontWeight: 900,
-      fontSize: "28px", letterSpacing: "3px",
-      padding: "14px 32px", borderRadius: "10px",
-      animation: "pulse 0.4s ease-in-out infinite alternate",
-      pointerEvents: "none", zIndex: 30,
-      textShadow: "0 0 10px rgba(255,100,100,0.8)",
-      border: "2px solid rgba(255,255,255,0.5)",
-    }}>
-      ⚠️ TRAIN INCOMING!
-    </div>
-  );
-}
-
 function WebGLCheck({ children }: { children: React.ReactNode }) {
   const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
 
@@ -129,8 +123,9 @@ function WebGLCheck({ children }: { children: React.ReactNode }) {
   if (!webglAvailable) {
     return (
       <div style={{
-        position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-        background: "#87CEEB", color: "#333", fontFamily: "system-ui", textAlign: "center", padding: "40px"
+        position: "fixed", inset: 0, display: "flex", alignItems: "center",
+        justifyContent: "center", background: "#87CEEB", color: "#333",
+        fontFamily: "system-ui", textAlign: "center", padding: "40px",
       }}>
         <div>
           <div style={{ fontSize: "48px", marginBottom: "16px" }}>⚠️</div>
@@ -145,63 +140,56 @@ function WebGLCheck({ children }: { children: React.ReactNode }) {
 }
 
 function ScoreLoop() {
-  const { gameState, addScore, speed } = useGameStore();
+  const { gameState, addScore } = useGameStore();
   const playing = gameState === "playing";
-  const scoreTimerRef = useRef(0);
-  const milestoneRef = useRef(0);
-  useFrame((_, delta) => {
-    if (!playing) return;
-    scoreTimerRef.current += delta;
-    if (scoreTimerRef.current >= 0.1) {
-      scoreTimerRef.current = 0;
-      addScore(1);
-    }
-  });
+  const timerRef = useRef(0);
 
-  useEffect(() => {
-    if (!playing) {
-      milestoneRef.current = 0;
-      scoreTimerRef.current = 0;
-    }
-  }, [playing]);
+  useFrame((_, delta) => {
+    if (!playing) { timerRef.current = 0; return; }
+    timerRef.current += delta;
+    if (timerRef.current >= 0.1) { timerRef.current = 0; addScore(1); }
+  });
 
   return null;
 }
 
 export function Game() {
-  const { gameState, score, highScore, lives, coins, speed, lane, startGame, goToMenu, setSpeed } = useGameStore();
+  const { gameState, score, highScore, lives, coins, speed, lane, startGame, goToMenu, setSpeed } =
+    useGameStore();
   const { play: playSound } = useSound();
 
   const [isJumping, setIsJumping] = useState(false);
   const [isSliding, setIsSliding] = useState(false);
   const [isHit, setIsHit] = useState(false);
-  const [trainWarning, setTrainWarning] = useState(false);
   const slideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const playing = gameState === "playing";
 
-  const handleInput = useCallback((action: "left" | "right" | "jump" | "slide") => {
-    if (!playing) return;
-    const currentLane = useGameStore.getState().lane;
-    if (action === "left") {
-      const next = Math.max(-1, currentLane - 1) as Lane;
-      if (next !== currentLane) { playSound("slide"); useGameStore.getState().setLane(next); }
-    }
-    if (action === "right") {
-      const next = Math.min(1, currentLane + 1) as Lane;
-      if (next !== currentLane) { playSound("slide"); useGameStore.getState().setLane(next); }
-    }
-    if (action === "jump" && !isJumping && !isSliding) {
-      playSound("jump");
-      setIsJumping(true);
-    }
-    if (action === "slide" && !isJumping && !isSliding) {
-      playSound("slide");
-      setIsSliding(true);
-      if (slideTimerRef.current) clearTimeout(slideTimerRef.current);
-      slideTimerRef.current = setTimeout(() => setIsSliding(false), 900);
-    }
-  }, [playing, isJumping, isSliding, playSound]);
+  const handleInput = useCallback(
+    (action: "left" | "right" | "jump" | "slide") => {
+      if (!playing) return;
+      const currentLane = useGameStore.getState().lane;
+      if (action === "left") {
+        const next = Math.max(-1, currentLane - 1) as Lane;
+        if (next !== currentLane) { playSound("slide"); useGameStore.getState().setLane(next); }
+      }
+      if (action === "right") {
+        const next = Math.min(1, currentLane + 1) as Lane;
+        if (next !== currentLane) { playSound("slide"); useGameStore.getState().setLane(next); }
+      }
+      if (action === "jump" && !isJumping && !isSliding) {
+        playSound("jump");
+        setIsJumping(true);
+      }
+      if (action === "slide" && !isJumping && !isSliding) {
+        playSound("slide");
+        setIsSliding(true);
+        if (slideTimerRef.current) clearTimeout(slideTimerRef.current);
+        slideTimerRef.current = setTimeout(() => setIsSliding(false), 900);
+      }
+    },
+    [playing, isJumping, isSliding, playSound],
+  );
 
   useInput(handleInput, playing);
 
@@ -217,10 +205,9 @@ export function Game() {
     useGameStore.getState().addCoin();
   }, [playSound]);
 
+  // Keep the train horn sound, just no visual popup
   const handleTrainHorn = useCallback(() => {
     playSound("trainhorn");
-    setTrainWarning(true);
-    setTimeout(() => setTrainWarning(false), 2500);
   }, [playSound]);
 
   const handleJumpComplete = useCallback(() => {
@@ -230,24 +217,16 @@ export function Game() {
   useEffect(() => {
     if (!playing) return;
     const interval = setInterval(() => {
-      const currentSpeed = useGameStore.getState().speed;
-      setSpeed(Math.min(currentSpeed + 0.15, 22));
+      const s = useGameStore.getState().speed;
+      setSpeed(Math.min(s + 0.15, 22));
     }, 3000);
     return () => clearInterval(interval);
   }, [playing, setSpeed]);
 
-  const handleStart = useCallback(() => {
-    startGame();
-  }, [startGame]);
+  const handleStart = useCallback(() => { startGame(); }, [startGame]);
 
   return (
     <WebGLCheck>
-      <style>{`
-        @keyframes pulse {
-          from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-          to { opacity: 0.8; transform: translate(-50%, -50%) scale(1.04); }
-        }
-      `}</style>
       <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#87CEEB" }}>
         <Canvas
           shadows={false}
@@ -267,11 +246,18 @@ export function Game() {
         </Canvas>
 
         <HUD score={score} lives={lives} coins={coins} visible={playing} />
-        <TrainWarning visible={trainWarning && playing} />
 
-        {gameState === "menu" && <MenuScreen onStart={handleStart} highScore={highScore} />}
+        {gameState === "menu" && (
+          <MenuScreen onStart={handleStart} highScore={highScore} />
+        )}
         {gameState === "gameover" && (
-          <GameOverScreen score={score} highScore={highScore} coins={coins} onRestart={handleStart} onMenu={goToMenu} />
+          <GameOverScreen
+            score={score}
+            highScore={highScore}
+            coins={coins}
+            onRestart={handleStart}
+            onMenu={goToMenu}
+          />
         )}
       </div>
     </WebGLCheck>

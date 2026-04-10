@@ -27,9 +27,11 @@ export function Character({
   const { scene } = useThree();
   const { scene: gltfScene, animations } = useGLTF("/models/character.glb");
 
-  const rootRef   = useRef<THREE.Group>(new THREE.Group());
-  const clonedRef = useRef<THREE.Object3D | null>(null);
+  const rootRef    = useRef<THREE.Group>(new THREE.Group());
+  const clonedRef  = useRef<THREE.Object3D | null>(null);
   const groundYRef = useRef(0);
+  const rootBoneRef   = useRef<THREE.Bone | null>(null);
+  const rootBoneInitY = useRef(0);
 
   const mixerRef     = useRef<THREE.AnimationMixer | null>(null);
   const runActionRef = useRef<THREE.AnimationAction | null>(null);
@@ -100,6 +102,19 @@ export function Character({
     cloned.position.set(0, groundYRef.current, 0);
     root.add(cloned);
     clonedRef.current = cloned;
+
+    // Detect the root bone (parent is NOT a Bone = top of skeleton hierarchy)
+    // We'll zero its X/Z every frame to prevent forward root motion from
+    // the jump and slide clips from visually sliding the character.
+    rootBoneRef.current = null;
+    cloned.traverse((node) => {
+      if (node instanceof THREE.Bone && !(node.parent instanceof THREE.Bone)) {
+        if (!rootBoneRef.current) {
+          rootBoneRef.current = node;
+          rootBoneInitY.current = node.position.y;
+        }
+      }
+    });
 
     const mixer = new THREE.AnimationMixer(cloned);
     mixerRef.current = mixer;
@@ -182,13 +197,22 @@ export function Character({
     if (jump)  jump.setEffectiveWeight(THREE.MathUtils.lerp(jump.getEffectiveWeight(),  jumping ? 1 : 0, f));
     if (slide) slide.setEffectiveWeight(THREE.MathUtils.lerp(slide.getEffectiveWeight(), sliding ? 1 : 0, f));
 
-    // ── Root-motion lock: zero out X/Z every frame so character stays at Z=0 ──
-    // Y is locked to groundY (jump height lives on the root GROUP instead)
+    // ── Root-motion lock ──
+    // Lock the scene-level clone so it never drifts
     const cloned = clonedRef.current;
     if (cloned) {
       cloned.position.x = 0;
       cloned.position.z = 0;
-      cloned.position.y = groundYRef.current; // keep model grounded; jump = root group Y
+      cloned.position.y = groundYRef.current; // jump height = root GROUP; keep clone grounded
+    }
+    // Also lock the skeleton root bone's X/Z so baked-in forward motion
+    // in jump/slide clips is stripped at the bone level too
+    const rb = rootBoneRef.current;
+    if (rb) {
+      rb.position.x = 0;
+      rb.position.z = 0;
+      // During jump: lock Y too — height comes from root group's sine arc
+      if (jumping) rb.position.y = rootBoneInitY.current;
     }
 
     // ── Jump arc: sine curve on the root group's Y ──
