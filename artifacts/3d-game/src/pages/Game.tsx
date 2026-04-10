@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { PerspectiveCamera, Stars } from "@react-three/drei";
+import { PerspectiveCamera } from "@react-three/drei";
 import { useGameStore, Lane } from "@/game/useGameStore";
 import { useVoice } from "@/game/useVoice";
 import { useInput } from "@/game/useInput";
@@ -20,10 +20,8 @@ function GameScene() {
   const [isJumping, setIsJumping] = useState(false);
   const [isHit, setIsHit] = useState(false);
   const [playerY, setPlayerY] = useState(0);
-  const jumpYRef = useRef(0);
 
   const playing = gameState === "playing";
-
   const scoreTimerRef = useRef(0);
   const milestoneRef = useRef(0);
 
@@ -51,7 +49,6 @@ function GameScene() {
 
   const handleJumpComplete = useCallback(() => {
     setIsJumping(false);
-    jumpYRef.current = 0;
     setPlayerY(0);
   }, []);
 
@@ -61,11 +58,9 @@ function GameScene() {
       const interval = setInterval(() => {
         progress += 0.05;
         const y = Math.sin(progress * Math.PI) * 2.8;
-        jumpYRef.current = y;
         setPlayerY(y);
         if (progress >= 1) {
           clearInterval(interval);
-          jumpYRef.current = 0;
           setPlayerY(0);
         }
       }, 16);
@@ -85,12 +80,10 @@ function GameScene() {
 
   useFrame((_, delta) => {
     if (!playing) return;
-
     scoreTimerRef.current += delta;
     if (scoreTimerRef.current >= 0.1) {
       scoreTimerRef.current = 0;
       addScore(1);
-
       const score = useGameStore.getState().score;
       const milestone = Math.floor(score / 500);
       if (milestone > milestoneRef.current) {
@@ -102,21 +95,15 @@ function GameScene() {
 
   return (
     <>
-      <color attach="background" args={["#0A0A1A"]} />
-      <fog attach="fog" color="#0A0A1A" near={30} far={80} />
-      <Stars radius={80} depth={50} count={2000} factor={4} saturation={0} fade speed={1} />
-
-      <ambientLight intensity={0.3} color="#4060AA" />
+      <color attach="background" args={["#87CEEB"]} />
+      <ambientLight intensity={1.8} color="#FFFFFF" />
       <directionalLight
-        position={[5, 12, -5]}
-        intensity={1.2}
-        color="#FFEECC"
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        position={[8, 20, 10]}
+        intensity={2.5}
+        color="#FFF9E6"
+        castShadow={false}
       />
-      <pointLight position={[0, 8, 5]} color="#FF6688" intensity={1.5} distance={25} />
-      <pointLight position={[0, 5, -20]} color="#4488FF" intensity={1} distance={30} />
+      <hemisphereLight args={["#87CEEB", "#7CFC00", 0.6]} />
 
       <PerspectiveCamera makeDefault position={[0, 4.5, 8]} fov={65} rotation={[-0.2, 0, 0]} />
 
@@ -164,12 +151,12 @@ function WebGLCheck({ children }: { children: React.ReactNode }) {
     return (
       <div style={{
         position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-        background: "#0A0A1A", color: "#fff", fontFamily: "system-ui", textAlign: "center", padding: "40px"
+        background: "#87CEEB", color: "#333", fontFamily: "system-ui", textAlign: "center", padding: "40px"
       }}>
         <div>
           <div style={{ fontSize: "48px", marginBottom: "16px" }}>⚠️</div>
           <h2 style={{ marginBottom: "8px" }}>WebGL Required</h2>
-          <p style={{ color: "#aaa" }}>Your browser or device needs WebGL support to run this game. Try opening this in Chrome or Firefox.</p>
+          <p style={{ color: "#555" }}>Please open this in Chrome or Firefox with hardware acceleration enabled.</p>
         </div>
       </div>
     );
@@ -189,8 +176,17 @@ export function Game() {
 
   return (
     <WebGLCheck>
-      <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#0A0A1A" }}>
-        <Canvas shadows gl={{ antialias: true, powerPreference: "high-performance" }}>
+      <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#87CEEB" }}>
+        <Canvas
+          shadows={false}
+          gl={{
+            antialias: false,
+            powerPreference: "high-performance",
+            depth: true,
+          }}
+          frameloop="always"
+          dpr={[1, 1.5]}
+        >
           <GameScene />
         </Canvas>
 

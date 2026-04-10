@@ -52,7 +52,6 @@ export function Coins({ speed, playing, playerLane, playerY, onCollect }: CoinsP
       spawnTimerRef.current = 0;
       const lane = Math.floor(Math.random() * 3);
       const height = Math.random() < 0.3 ? 2.5 : 0.4;
-
       const count = Math.random() < 0.5 ? 3 : 1;
       for (let i = 0; i < count; i++) {
         coinsRef.current.push({
@@ -81,9 +80,7 @@ export function Coins({ speed, playing, playerLane, playerY, onCollect }: CoinsP
 
         if (dx < 1.5 && dz < 1.2 && dy < 1.5) {
           coin.collected = true;
-          if (mesh) {
-            mesh.visible = false;
-          }
+          if (mesh) mesh.visible = false;
           onCollectRef.current();
         }
       }
@@ -91,9 +88,8 @@ export function Coins({ speed, playing, playerLane, playerY, onCollect }: CoinsP
       return coin.z < DESPAWN_Z && !coin.collected;
     });
 
-    meshesRef.current.forEach((mesh, id) => {
+    meshesRef.current.forEach((_, id) => {
       if (!coinsRef.current.find((c) => c.id === id)) {
-        groupRef.current?.remove(mesh);
         meshesRef.current.delete(id);
       }
     });
@@ -115,20 +111,9 @@ export function Coins({ speed, playing, playerLane, playerY, onCollect }: CoinsP
       {coinsRef.current.map((coin) => (
         <group key={coin.id} ref={setRef(coin.id, coin.lane, coin.height)}>
           <mesh>
-            <torusGeometry args={[0.25, 0.08, 8, 16]} />
-            <meshStandardMaterial
-              color="#FFD700"
-              emissive="#FFD700"
-              emissiveIntensity={0.4}
-              metalness={0.8}
-              roughness={0.2}
-            />
+            <torusGeometry args={[0.25, 0.08, 6, 12]} />
+            <meshLambertMaterial color="#FFD700" emissive="#FFD700" emissiveIntensity={0.2} />
           </mesh>
-          <mesh>
-            <circleGeometry args={[0.18, 16]} />
-            <meshStandardMaterial color="#FFA500" metalness={0.9} roughness={0.1} />
-          </mesh>
-          <pointLight color="#FFD700" intensity={0.5} distance={1.5} />
         </group>
       ))}
     </group>
