@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { PerspectiveCamera } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
 import { useGameStore, Lane } from "@/game/useGameStore";
 import { useSound } from "@/game/useSound";
 import { useInput } from "@/game/useInput";
@@ -13,6 +13,37 @@ import { Police } from "@/components/game/Police";
 import { HUD } from "@/components/ui/HUD";
 import { MenuScreen } from "@/components/ui/MenuScreen";
 import { GameOverScreen } from "@/components/ui/GameOverScreen";
+
+/** Smooth camera that sits close behind/above the character, rises during jumps */
+function CameraRig({ isJumping, speed }: { isJumping: boolean; speed: number }) {
+  const { camera } = useThree();
+  const camYRef = useRef(2.2);
+
+  useEffect(() => {
+    camera.position.set(0, 2.2, 4.6);
+    camera.rotation.set(-0.14, 0, 0);
+    const pc = camera as THREE.PerspectiveCamera;
+    pc.fov  = 76;
+    pc.near = 0.1;
+    pc.far  = 1000;
+    pc.updateProjectionMatrix();
+  }, [camera]);
+
+  useFrame((_, delta) => {
+    // Camera rises a little when player jumps — gives sense of height
+    const targetY = isJumping ? 3.0 : 2.2;
+    camYRef.current += (targetY - camYRef.current) * Math.min(1, delta * 5);
+    camera.position.y = camYRef.current;
+
+    // Slight FOV swell as speed increases — feels faster
+    const pc = camera as THREE.PerspectiveCamera;
+    const targetFov = 76 + (speed - 8) * 0.6;
+    pc.fov += (Math.min(88, targetFov) - pc.fov) * Math.min(1, delta * 2);
+    pc.updateProjectionMatrix();
+  });
+
+  return null;
+}
 
 interface GameSceneProps {
   onHit: () => void;
@@ -35,7 +66,7 @@ function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, onJumpCom
       <directionalLight position={[5, 14, 8]} intensity={3.5} color="#FFF8E0" castShadow={false} />
       <directionalLight position={[-4, 8, 6]} intensity={1.8} color="#FFFFFF" castShadow={false} />
       <hemisphereLight args={["#87CEEB", "#90EE90", 1.2]} />
-      <PerspectiveCamera makeDefault position={[0, 3.0, 6.5]} fov={72} rotation={[-0.18, 0, 0]} />
+      <CameraRig isJumping={isJumping} speed={speed} />
 
       <Environment speed={speed} playing={playing} />
       <Track speed={speed} playing={playing} />

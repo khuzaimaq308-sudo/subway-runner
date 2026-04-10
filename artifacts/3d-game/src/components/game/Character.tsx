@@ -9,8 +9,9 @@ const LANE_X = [-2.5, 0, 2.5];
 const MODEL_SCALE = 1.0;
 const JUMP_TIMESCALE = 2.8;
 const SLIDE_TIMESCALE = 1.7;
-const FADE_IN = 0.1;
-const FADE_OUT = 0.22;
+const BLEND = 12;           // weight lerp speed
+const JUMP_HEIGHT = 1.6;    // metres at arc peak
+const JUMP_DURATION = 0.85; // seconds (= 2.333s clip / 2.8x speed)
 
 interface CharacterProps {
   lane: Lane;
@@ -21,155 +22,129 @@ interface CharacterProps {
 }
 
 export function Character({
-  lane,
-  isJumping,
-  isHit,
-  isSliding,
-  onJumpComplete,
+  lane, isJumping, isHit, isSliding, onJumpComplete,
 }: CharacterProps) {
   const { scene } = useThree();
   const { scene: gltfScene, animations } = useGLTF("/models/character.glb");
 
-  const rootRef = useRef<THREE.Group>(new THREE.Group());
-  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const rootRef   = useRef<THREE.Group>(new THREE.Group());
+  const clonedRef = useRef<THREE.Object3D | null>(null);
+  const groundYRef = useRef(0);
+
+  const mixerRef     = useRef<THREE.AnimationMixer | null>(null);
   const runActionRef = useRef<THREE.AnimationAction | null>(null);
   const jumpActionRef = useRef<THREE.AnimationAction | null>(null);
   const slideActionRef = useRef<THREE.AnimationAction | null>(null);
 
-  const hitTimerRef = useRef(0);
-  const targetXRef = useRef(LANE_X[lane + 1]);
-  const isJumpingRef = useRef(isJumping);
-  const isSlidingRef = useRef(isSliding);
-  const onJumpCompleteRef = useRef(onJumpComplete);
-  const prevJumpingRef = useRef(false);
-  const prevSlidingRef = useRef(false);
+  const jumpProgressRef  = useRef(0);
+  const jumpDoneRef      = useRef(false);
+  const hitTimerRef      = useRef(0);
+  const targetXRef       = useRef(LANE_X[lane + 1]);
 
-  isJumpingRef.current = isJumping;
-  isSlidingRef.current = isSliding;
-  onJumpCompleteRef.current = onJumpComplete;
+  // Always-fresh refs for props used inside useFrame
+  const isJumpingRef  = useRef(isJumping);
+  const isSlidingRef  = useRef(isSliding);
+  const onCompleteRef = useRef(onJumpComplete);
+  const prevJumpRef   = useRef(false);
+  const prevSlideRef  = useRef(false);
 
-  useEffect(() => {
-    targetXRef.current = LANE_X[lane + 1];
-  }, [lane]);
+  isJumpingRef.current  = isJumping;
+  isSlidingRef.current  = isSliding;
+  onCompleteRef.current = onJumpComplete;
 
-  useEffect(() => {
-    if (isHit) hitTimerRef.current = 0.5;
-  }, [isHit]);
+  useEffect(() => { targetXRef.current = LANE_X[lane + 1]; }, [lane]);
+  useEffect(() => { if (isHit) hitTimerRef.current = 0.5; }, [isHit]);
 
-  // Mount the root group into the scene once
+  // Add root group to scene once
   useEffect(() => {
     const root = rootRef.current;
     root.position.set(LANE_X[1], 0, 0);
     root.scale.setScalar(MODEL_SCALE);
     scene.add(root);
-    return () => {
-      scene.remove(root);
-    };
+    return () => { scene.remove(root); };
   }, [scene]);
 
-  // Load + clone character model and set up AnimationMixer
+  // Clone model + build AnimationMixer
   useEffect(() => {
     if (!gltfScene || animations.length === 0) return;
     const root = rootRef.current;
 
-    // Clean previous model
     while (root.children.length > 0) root.remove(root.children[0]);
-    if (mixerRef.current) {
-      mixerRef.current.stopAllAction();
-      mixerRef.current = null;
-    }
+    mixerRef.current?.stopAllAction();
+    mixerRef.current = null;
     runActionRef.current = null;
     jumpActionRef.current = null;
     slideActionRef.current = null;
+    clonedRef.current = null;
 
     const cloned = skeletonClone(gltfScene) as THREE.Object3D;
     cloned.rotation.y = Math.PI;
 
     cloned.traverse((child) => {
       const mesh = child as THREE.Mesh;
-      if (mesh.isMesh) {
-        mesh.frustumCulled = false;
-        const mats = Array.isArray(mesh.material)
-          ? mesh.material
-          : [mesh.material];
-        mats.forEach((m) => {
-          // DoubleSide prevents back-face holes during animation deformation
-          (m as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
-          // alphaTest handles hair/cloth cutouts without transparent depth sorting
-          m.alphaTest = 0.05;
-          m.transparent = false;
-          (m as THREE.MeshStandardMaterial).depthWrite = true;
-          m.needsUpdate = true;
-        });
-      }
+      if (!mesh.isMesh) return;
+      mesh.frustumCulled = false;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      mats.forEach((m) => {
+        (m as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+        m.alphaTest   = 0.05;
+        m.transparent = false;
+        (m as THREE.MeshStandardMaterial).depthWrite = true;
+        m.needsUpdate = true;
+      });
     });
 
-    // Ground the character at y=0
+    // Ground the model — store offset so we can lock it every frame
     const box = new THREE.Box3().setFromObject(cloned);
-    cloned.position.y = -box.min.y;
+    groundYRef.current   = -box.min.y;
+    cloned.position.set(0, groundYRef.current, 0);
     root.add(cloned);
+    clonedRef.current = cloned;
 
     const mixer = new THREE.AnimationMixer(cloned);
     mixerRef.current = mixer;
 
-    const find = (name: string) =>
-      animations.find((a) => a.name === name);
-
-    const runClip =
-      find("Running") ?? find("Run_03") ?? animations[0];
-    const jumpClip = find("Run_and_Jump");
+    const find = (name: string) => animations.find((a) => a.name === name);
+    const runClip   = find("Running") ?? find("Run_03") ?? animations[0];
+    const jumpClip  = find("Run_and_Jump");
     const slideClip = find("slide_light");
 
-    // Run action: starts immediately, loops forever
+    // Run: always playing, weight handled manually
     const runAction = mixer.clipAction(runClip);
     runAction.loop = THREE.LoopRepeat;
     runAction.play();
     runActionRef.current = runAction;
 
-    // Jump action: configured but NOT started yet.
-    // Starting it here would cause it to silently play-through at weight 0
-    // and set _loopCount=0 before the player ever jumps, breaking replays.
+    // Jump: NOT pre-started (pre-starting causes silent completion before first press)
     if (jumpClip) {
-      const jumpAction = mixer.clipAction(jumpClip);
-      jumpAction.loop = THREE.LoopOnce;
-      jumpAction.clampWhenFinished = true;
-      jumpAction.timeScale = JUMP_TIMESCALE;
-      jumpActionRef.current = jumpAction;
+      const a = mixer.clipAction(jumpClip);
+      a.loop = THREE.LoopOnce;
+      a.clampWhenFinished = true;
+      a.timeScale = JUMP_TIMESCALE;
+      a.setEffectiveWeight(0);
+      jumpActionRef.current = a;
     }
 
-    // Slide action: same pattern — configured but not started
+    // Slide: same — NOT pre-started
     if (slideClip) {
-      const slideAction = mixer.clipAction(slideClip);
-      slideAction.loop = THREE.LoopOnce;
-      slideAction.clampWhenFinished = true;
-      slideAction.timeScale = SLIDE_TIMESCALE;
-      slideActionRef.current = slideAction;
+      const a = mixer.clipAction(slideClip);
+      a.loop = THREE.LoopOnce;
+      a.clampWhenFinished = true;
+      a.timeScale = SLIDE_TIMESCALE;
+      a.setEffectiveWeight(0);
+      slideActionRef.current = a;
     }
 
-    // Listen for one-shot animations finishing
-    const onFinished = (e: THREE.Event) => {
-      const done = (e as unknown as { action: THREE.AnimationAction }).action;
-      const run = runActionRef.current;
-      if (!run) return;
-
-      if (done === jumpActionRef.current) {
-        // Crossfade back to run, then notify Game.tsx
-        done.crossFadeTo(run, FADE_OUT, false);
-        onJumpCompleteRef.current();
-      } else if (done === slideActionRef.current) {
-        done.crossFadeTo(run, FADE_OUT, false);
-      }
-    };
-
-    mixer.addEventListener("finished", onFinished);
-    prevJumpingRef.current = false;
-    prevSlidingRef.current = false;
+    prevJumpRef.current  = false;
+    prevSlideRef.current = false;
+    jumpProgressRef.current = 0;
+    jumpDoneRef.current = false;
 
     return () => {
-      mixer.removeEventListener("finished", onFinished);
       mixer.stopAllAction();
       mixer.uncacheRoot(cloned);
       root.remove(cloned);
+      clonedRef.current = null;
     };
   }, [gltfScene, animations]);
 
@@ -177,43 +152,66 @@ export function Character({
     const root = rootRef.current;
     if (!root || !mixerRef.current) return;
 
-    // Advance animations
-    mixerRef.current.update(delta);
-
     const jumping = isJumpingRef.current;
     const sliding = isSlidingRef.current;
-    const run = runActionRef.current;
-    const jump = jumpActionRef.current;
+    const run   = runActionRef.current;
+    const jump  = jumpActionRef.current;
     const slide = slideActionRef.current;
 
-    // Jump started this frame
-    if (jumping && !prevJumpingRef.current && jump && run) {
-      // reset() clears _loopCount → -1 so LoopOnce plays fresh every time
+    // Rising edge: start one-shot animations fresh
+    if (jumping && !prevJumpRef.current && jump) {
       jump.reset();
       jump.play();
-      run.crossFadeTo(jump, FADE_IN, false);
+      jumpProgressRef.current = 0;
+      jumpDoneRef.current = false;
     }
-
-    // Slide started this frame
-    if (sliding && !prevSlidingRef.current && slide && run) {
+    if (sliding && !prevSlideRef.current && slide) {
       slide.reset();
       slide.play();
-      run.crossFadeTo(slide, FADE_IN, false);
     }
 
-    // Slide ended before animation finished (timeout in Game.tsx)
-    if (!sliding && prevSlidingRef.current && slide && run) {
-      slide.crossFadeTo(run, FADE_OUT, false);
+    prevJumpRef.current  = jumping;
+    prevSlideRef.current = sliding;
+
+    // Advance mixer
+    mixerRef.current.update(delta);
+
+    // ── Manual weight blending (far more reliable than crossFadeTo) ──
+    const f = Math.min(1, delta * BLEND);
+    if (run)   run.setEffectiveWeight(THREE.MathUtils.lerp(run.getEffectiveWeight(),   (!jumping && !sliding) ? 1 : 0, f));
+    if (jump)  jump.setEffectiveWeight(THREE.MathUtils.lerp(jump.getEffectiveWeight(),  jumping ? 1 : 0, f));
+    if (slide) slide.setEffectiveWeight(THREE.MathUtils.lerp(slide.getEffectiveWeight(), sliding ? 1 : 0, f));
+
+    // ── Root-motion lock: zero out X/Z every frame so character stays at Z=0 ──
+    // Y is locked to groundY (jump height lives on the root GROUP instead)
+    const cloned = clonedRef.current;
+    if (cloned) {
+      cloned.position.x = 0;
+      cloned.position.z = 0;
+      cloned.position.y = groundYRef.current; // keep model grounded; jump = root group Y
     }
 
-    prevJumpingRef.current = jumping;
-    prevSlidingRef.current = sliding;
+    // ── Jump arc: sine curve on the root group's Y ──
+    if (jumping) {
+      jumpProgressRef.current = Math.min(1, jumpProgressRef.current + delta / JUMP_DURATION);
+      root.position.y = Math.sin(jumpProgressRef.current * Math.PI) * JUMP_HEIGHT;
 
-    // Smooth lane sliding
-    const currentX = root.position.x;
-    root.position.x += (targetXRef.current - currentX) * Math.min(1, delta * 14);
+      // Notify Game.tsx slightly before animation ends so landing is smooth
+      if (jumpProgressRef.current >= 0.92 && !jumpDoneRef.current) {
+        jumpDoneRef.current = true;
+        onCompleteRef.current();
+      }
+    } else {
+      jumpProgressRef.current = 0;
+      jumpDoneRef.current = false;
+      // Smooth landing — lerp Y back to 0
+      root.position.y = THREE.MathUtils.lerp(root.position.y, 0, Math.min(1, delta * 12));
+    }
 
-    // Hit shake
+    // ── Lane switching (smooth on X) ──
+    root.position.x += (targetXRef.current - root.position.x) * Math.min(1, delta * 14);
+
+    // ── Hit shake ──
     if (hitTimerRef.current > 0) {
       hitTimerRef.current -= delta;
       root.rotation.z = Math.sin(hitTimerRef.current * 28) * 0.22;
