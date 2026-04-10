@@ -9,9 +9,7 @@ interface ObstacleData {
   lane: number;
   z: number;
   type: ObstacleType;
-  /** player can jump over */
   jumpable: boolean;
-  /** player must slide under */
   slideOnly: boolean;
   extraSpeed: number;
 }
@@ -26,30 +24,361 @@ interface ObstaclesProps {
   onTrainHorn: () => void;
 }
 
-const LANE_X = [-2.5, 0, 2.5];
+const LANE_X  = [-2.5, 0, 2.5];
 const SPAWN_Z = -65;
 const PLAYER_Z = 0;
 const DESPAWN_Z = 12;
 
-// ── shared materials ──────────────────────────────────────────────
-const matOrange   = new THREE.MeshLambertMaterial({ color: 0xFF8C00 });
-const matYellow   = new THREE.MeshLambertMaterial({ color: 0xFFFF00, emissive: 0xFFFF00, emissiveIntensity: 0.4 });
-const matRedTrain = new THREE.MeshLambertMaterial({ color: 0xCC2200 });
-const matRedDark  = new THREE.MeshLambertMaterial({ color: 0x991100 });
-const matWindow   = new THREE.MeshLambertMaterial({ color: 0xAEE4FF, emissive: 0xAEE4FF, emissiveIntensity: 0.2 });
-const matBox      = new THREE.MeshLambertMaterial({ color: 0xD4A020 });
-const matBoxEdge  = new THREE.MeshLambertMaterial({ color: 0x8B6010, wireframe: true });
-const matGreen    = new THREE.MeshLambertMaterial({ color: 0x228822 });
-const matGreenDk  = new THREE.MeshLambertMaterial({ color: 0x115511 });
-const matYellowT  = new THREE.MeshLambertMaterial({ color: 0xFFCC00 });
-const matGate     = new THREE.MeshLambertMaterial({ color: 0xDD3300 });
-const matGateDk   = new THREE.MeshLambertMaterial({ color: 0xAA2200 });
+// ── non-train shared materials (unchanged) ────────────────────────────────
+const matOrange  = new THREE.MeshLambertMaterial({ color: 0xFF8C00 });
+const matYellow  = new THREE.MeshLambertMaterial({ color: 0xFFFF00, emissive: 0xFFFF00, emissiveIntensity: 0.4 });
+const matBox     = new THREE.MeshLambertMaterial({ color: 0xD4A020 });
+const matBoxEdge = new THREE.MeshLambertMaterial({ color: 0x8B6010, wireframe: true });
+const matGate    = new THREE.MeshLambertMaterial({ color: 0xDD3300 });
+const matGateDk  = new THREE.MeshLambertMaterial({ color: 0xAA2200 });
+const matBlack   = new THREE.MeshLambertMaterial({ color: 0x111111 });
+const matYellowT = new THREE.MeshLambertMaterial({ color: 0xFFCC00 });
 
-// ── obstacle builders ────────────────────────────────────────────
+// ── Canvas texture helpers ────────────────────────────────────────────────
+function rr(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+/** Side panel of a train car (seen by the player as they run alongside) */
+function makeCarSideTex(): THREE.CanvasTexture {
+  const W = 512, H = 256;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d")!;
+
+  // Body gradient — cherry red
+  const bodyGrad = ctx.createLinearGradient(0, 0, 0, H);
+  bodyGrad.addColorStop(0, "#FF3333");
+  bodyGrad.addColorStop(0.5, "#CC1111");
+  bodyGrad.addColorStop(1,   "#AA0000");
+  ctx.fillStyle = bodyGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Top highlight stripe
+  ctx.fillStyle = "rgba(255,180,180,0.3)";
+  ctx.fillRect(0, 0, W, 40);
+
+  // Yellow bottom racing stripe
+  ctx.fillStyle = "#FFD700";
+  ctx.fillRect(0, H - 36, W, 22);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, H - 14, W, 14);
+
+  // Windows — two per side
+  const wins = [
+    { cx: 108, cy: 105 },
+    { cx: 298, cy: 105 },
+    { cx: 440, cy: 105 },
+  ];
+  for (const { cx, cy } of wins) {
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    rr(ctx, cx - 42, cy - 38, 84, 76, 10);
+    ctx.fill();
+    // Glass
+    const winGrad = ctx.createLinearGradient(cx - 40, cy - 36, cx - 40, cy + 36);
+    winGrad.addColorStop(0, "#C5EEFF");
+    winGrad.addColorStop(1, "#7EC8E3");
+    ctx.fillStyle = winGrad;
+    rr(ctx, cx - 40, cy - 36, 80, 72, 10);
+    ctx.fill();
+    // Glass shine
+    ctx.fillStyle = "rgba(255,255,255,0.65)";
+    ctx.beginPath();
+    ctx.ellipse(cx - 12, cy - 18, 22, 12, -0.35, 0, Math.PI * 2);
+    ctx.fill();
+    // Frame outline
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 6;
+    rr(ctx, cx - 40, cy - 36, 80, 72, 10);
+    ctx.stroke();
+  }
+
+  // Rivet dots along top and bottom edges
+  ctx.fillStyle = "#888";
+  for (let x = 24; x < W; x += 52) {
+    ctx.beginPath(); ctx.arc(x, 16, 4, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Bold black outline
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, W - 10, H - 10);
+
+  // "METRO" label
+  ctx.font = "bold 34px Arial Black, Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#FFD700";
+  ctx.fillText("METRO", W / 2, H - 50);
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 3;
+  ctx.strokeText("METRO", W / 2, H - 50);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+/** End panel / door face seen head-on as the train approaches */
+function makeCarEndTex(): THREE.CanvasTexture {
+  const W = 256, H = 256;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d")!;
+
+  // Body
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#FF3333");
+  bg.addColorStop(1, "#AA0000");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Door
+  const doorGrad = ctx.createLinearGradient(80, 80, 80, H - 20);
+  doorGrad.addColorStop(0, "#CC1111");
+  doorGrad.addColorStop(1, "#991100");
+  ctx.fillStyle = doorGrad;
+  rr(ctx, 80, 80, 96, H - 100, 8);
+  ctx.fill();
+  // Door highlight
+  ctx.fillStyle = "rgba(255,150,150,0.25)";
+  rr(ctx, 84, 84, 44, H - 108, 6);
+  ctx.fill();
+  // Door outline
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 5;
+  rr(ctx, 80, 80, 96, H - 100, 8);
+  ctx.stroke();
+  // Door handle
+  ctx.fillStyle = "#FFD700";
+  ctx.beginPath(); ctx.arc(164, H / 2 + 20, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(164, H / 2 + 20, 7, 0, Math.PI * 2); ctx.stroke();
+
+  // Small porthole window
+  ctx.fillStyle = "#C5EEFF";
+  ctx.beginPath(); ctx.arc(W / 2, 45, 28, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.beginPath(); ctx.ellipse(W / 2 - 8, 35, 12, 7, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(W / 2, 45, 28, 0, Math.PI * 2); ctx.stroke();
+
+  // Yellow bottom stripe
+  ctx.fillStyle = "#FFD700";
+  ctx.fillRect(0, H - 36, W, 22);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, H - 14, W, 14);
+
+  // Outer outline
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, W - 10, H - 10);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+/** Roof of the train car */
+function makeCarRoofTex(): THREE.CanvasTexture {
+  const W = 256, H = 128;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d")!;
+  ctx.fillStyle = "#881111";
+  ctx.fillRect(0, 0, W, H);
+  // ventilation ridges
+  ctx.strokeStyle = "#AA2222";
+  ctx.lineWidth = 8;
+  for (let x = 20; x < W; x += 30) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, W - 4, H - 4);
+  const tex = new THREE.CanvasTexture(cv);
+  return tex;
+}
+
+/** Big scary/funny cartoon face on the locomotive front */
+function makeLocoFaceTex(): THREE.CanvasTexture {
+  const W = 256, H = 286;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d")!;
+
+  // Background — bright yellow-green
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#88DD11");
+  bg.addColorStop(1, "#449900");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Top highlight
+  ctx.fillStyle = "rgba(255,255,200,0.25)";
+  ctx.fillRect(0, 0, W, 50);
+
+  // ── Left eye ──────────────────────────────────────────────────────
+  // White sclera
+  ctx.fillStyle = "#FFFBE8";
+  ctx.beginPath(); ctx.ellipse(73, 100, 44, 48, 0, 0, Math.PI * 2); ctx.fill();
+  // Pupil
+  ctx.fillStyle = "#111";
+  ctx.beginPath(); ctx.ellipse(73, 108, 22, 24, 0, 0, Math.PI * 2); ctx.fill();
+  // Shine
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.ellipse(63, 97, 10, 8, -0.4, 0, Math.PI * 2); ctx.fill();
+  // Angry brow
+  ctx.strokeStyle = "#111"; ctx.lineWidth = 9; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(33, 56); ctx.lineTo(110, 70); ctx.stroke();
+  // Eye outline
+  ctx.strokeStyle = "#111"; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.ellipse(73, 100, 44, 48, 0, 0, Math.PI * 2); ctx.stroke();
+
+  // ── Right eye ─────────────────────────────────────────────────────
+  ctx.fillStyle = "#FFFBE8";
+  ctx.beginPath(); ctx.ellipse(183, 100, 44, 48, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath(); ctx.ellipse(183, 108, 22, 24, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.ellipse(173, 97, 10, 8, -0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#111"; ctx.lineWidth = 9; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(223, 56); ctx.lineTo(146, 70); ctx.stroke();
+  ctx.strokeStyle = "#111"; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.ellipse(183, 100, 44, 48, 0, 0, Math.PI * 2); ctx.stroke();
+
+  // ── Grille mouth / smile ──────────────────────────────────────────
+  ctx.fillStyle = "#222";
+  rr(ctx, 36, 175, W - 72, 65, 12);
+  ctx.fill();
+  // Grille teeth bars
+  ctx.fillStyle = "#FFFBE8";
+  for (let i = 0; i < 5; i++) {
+    ctx.fillRect(44 + i * 38, 180, 22, 55);
+  }
+  // Grille outline
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 6;
+  rr(ctx, 36, 175, W - 72, 65, 12);
+  ctx.stroke();
+
+  // Headlight shine dots above eyes
+  ctx.fillStyle = "rgba(255,255,150,0.85)";
+  ctx.beginPath(); ctx.arc(73, 40, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(183, 40, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(73, 40, 14, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(183, 40, 14, 0, Math.PI * 2); ctx.stroke();
+
+  // Bold outer outline
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 12;
+  ctx.strokeRect(6, 6, W - 12, H - 12);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+/** Green loco body side */
+function makeLocoSideTex(): THREE.CanvasTexture {
+  const W = 512, H = 300;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d")!;
+
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#55DD22");
+  bg.addColorStop(1, "#228800");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Diagonal stripe accent
+  ctx.fillStyle = "rgba(255,220,0,0.3)";
+  for (let x = -H; x < W + H; x += 80) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0); ctx.lineTo(x + 40, 0);
+    ctx.lineTo(x + 40 + H, H); ctx.lineTo(x + H, H);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // "LOCO" text
+  ctx.font = "bold 52px Arial Black, Arial";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "#FFD700";
+  ctx.fillText("EXPRESS", W / 2, H / 2 + 10);
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 4;
+  ctx.strokeText("EXPRESS", W / 2, H / 2 + 10);
+
+  // Yellow bottom stripe
+  ctx.fillStyle = "#FFD700";
+  ctx.fillRect(0, H - 30, W, 20);
+
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, W - 10, H - 10);
+
+  const tex = new THREE.CanvasTexture(cv);
+  return tex;
+}
+
+// ── Lazy singleton textures ───────────────────────────────────────────────
+let _carSide: THREE.CanvasTexture | null = null;
+let _carEnd:  THREE.CanvasTexture | null = null;
+let _carRoof: THREE.CanvasTexture | null = null;
+let _locoFace: THREE.CanvasTexture | null = null;
+let _locoSide: THREE.CanvasTexture | null = null;
+const getCarSide  = () => (_carSide  ??= makeCarSideTex());
+const getCarEnd   = () => (_carEnd   ??= makeCarEndTex());
+const getCarRoof  = () => (_carRoof  ??= makeCarRoofTex());
+const getLocoFace = () => (_locoFace ??= makeLocoFaceTex());
+const getLocoSide = () => (_locoSide ??= makeLocoSideTex());
+
+function carMats() {
+  const side  = new THREE.MeshLambertMaterial({ map: getCarSide() });
+  const end   = new THREE.MeshLambertMaterial({ map: getCarEnd() });
+  const roof  = new THREE.MeshLambertMaterial({ map: getCarRoof() });
+  const bot   = new THREE.MeshLambertMaterial({ color: 0x550000 });
+  // BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
+  return [side, side, roof, bot, end, end];
+}
+
+function locoBodyMats() {
+  const side = new THREE.MeshLambertMaterial({ map: getLocoSide() });
+  const top  = new THREE.MeshLambertMaterial({ color: 0x226600 });
+  const bot  = new THREE.MeshLambertMaterial({ color: 0x112200 });
+  const end  = new THREE.MeshLambertMaterial({ color: 0x338811 });
+  return [side, side, top, bot, end, end];
+}
+
+function locoNoseMats() {
+  const side = new THREE.MeshLambertMaterial({ color: 0x338811 });
+  const top  = new THREE.MeshLambertMaterial({ color: 0x226600 });
+  const bot  = new THREE.MeshLambertMaterial({ color: 0x112200 });
+  const face = new THREE.MeshLambertMaterial({ map: getLocoFace() });
+  const back = new THREE.MeshLambertMaterial({ color: 0x338811 });
+  // +X, -X, +Y, -Y, +Z (FRONT FACE = face), -Z
+  return [side, side, top, bot, face, back];
+}
+
+// ── Non-train obstacle builders ───────────────────────────────────────────
 function makeBarrier(lane: number): ObstacleData {
   const group = new THREE.Group();
   group.position.set(LANE_X[lane], 0, SPAWN_Z);
-
   const bar    = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.55, 0.3), matOrange);
   bar.position.set(0, 0.3, 0);
   const leg1   = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.3, 0.3), matOrange);
@@ -58,81 +387,145 @@ function makeBarrier(lane: number): ObstacleData {
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.1, 0.35), matYellow);
   stripe.position.set(0, 0.56, 0);
   group.add(bar, leg1, leg2, stripe);
-
   return { mesh: group, lane, z: SPAWN_Z, type: "barrier", jumpable: true, slideOnly: false, extraSpeed: 0 };
 }
 
-/** Low archway gate — must SLIDE under, jumping does NOT help */
 function makeLowGate(lane: number): ObstacleData {
   const group = new THREE.Group();
   group.position.set(LANE_X[lane], 0, SPAWN_Z);
-
-  // Horizontal bar at ~1.05 m — above slide-height (~0.5 m) but below stand-height (~1.8 m)
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.18, 0.3), matGate);
+  const bar    = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.18, 0.3), matGate);
   bar.position.set(0, 1.05, 0);
-
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.32), matYellow);
   stripe.position.set(0, 1.14, 0);
-
-  const post1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.05, 0.3), matGateDk);
+  const post1  = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.05, 0.3), matGateDk);
   post1.position.set(-1.1, 0.52, 0);
-  const post2 = post1.clone(); post2.position.set(1.1, 0.52, 0);
-
-  // Diagonal hazard stripe on posts
-  const diag1 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.15, 0.32), matYellow);
+  const post2  = post1.clone(); post2.position.set(1.1, 0.52, 0);
+  const diag1  = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.15, 0.32), matYellow);
   diag1.position.set(-1.1, 0.75, 0); diag1.rotation.z = 0.4;
-  const diag2 = diag1.clone(); diag2.position.set(1.1, 0.75, 0);
-
+  const diag2  = diag1.clone(); diag2.position.set(1.1, 0.75, 0);
   group.add(bar, stripe, post1, post2, diag1, diag2);
   return { mesh: group, lane, z: SPAWN_Z, type: "low_gate", jumpable: false, slideOnly: true, extraSpeed: 0 };
 }
 
+// ── Cartoon train car ─────────────────────────────────────────────────────
 function makeTrainCar(lane: number): ObstacleData {
   const group = new THREE.Group();
   group.position.set(LANE_X[lane], 0, SPAWN_Z);
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 2.2, 4.5), matRedTrain);
+  // Body — 6-material array for cartoon textures
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 2.2, 4.5), carMats());
   body.position.set(0, 1.1, 0);
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.25, 4.3), matRedDark);
-  roof.position.set(0, 2.3, 0);
+  group.add(body);
 
-  for (const zOff of [-2.2, 2.2]) {
-    const win = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.5, 0.08), matWindow);
-    [-0.55, 0.55].forEach((x) => {
-      const w = win.clone(); w.position.set(x, 1.5, zOff); group.add(w);
-    });
-  }
-  const wheel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.22, 0.22, 0.15, 8),
-    new THREE.MeshLambertMaterial({ color: 0x333333 }),
+  // Roof ridge (no texture needed, just geometry detail)
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(1.95, 0.18, 4.3),
+    new THREE.MeshLambertMaterial({ color: 0x881111 }),
   );
-  wheel.rotation.z = Math.PI / 2;
-  for (const z of [-1.5, 1.5]) for (const x of [-1.05, 1.05]) {
-    const w = wheel.clone(); w.position.set(x, 0.22, z); group.add(w);
+  roof.position.set(0, 2.29, 0);
+  group.add(roof);
+
+  // Wheels — dark rubber-tyre cylinders
+  const wheelGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.15, 10);
+  const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  const hubMat   = new THREE.MeshLambertMaterial({ color: 0x888888 });
+  const hubGeo   = new THREE.CylinderGeometry(0.1, 0.1, 0.17, 8);
+  for (const z of [-1.5, 1.5]) {
+    for (const x of [-1.05, 1.05]) {
+      const w = new THREE.Mesh(wheelGeo, wheelMat);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(x, 0.22, z);
+      group.add(w);
+      const h = new THREE.Mesh(hubGeo, hubMat);
+      h.rotation.z = Math.PI / 2;
+      h.position.set(x, 0.22, z);
+      group.add(h);
+    }
   }
-  group.add(body, roof);
+
+  // Cartoon thick black outline effect — slightly larger semi-transparent box
+  const outline = new THREE.Mesh(
+    new THREE.BoxGeometry(2.18, 2.28, 4.58),
+    new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }),
+  );
+  outline.position.set(0, 1.1, 0);
+  group.add(outline);
 
   return { mesh: group, lane, z: SPAWN_Z, type: "train", jumpable: false, slideOnly: false, extraSpeed: 0 };
 }
 
+// ── Cartoon incoming locomotive ───────────────────────────────────────────
 function makeIncomingTrain(lane: number): ObstacleData {
   const group = new THREE.Group();
   group.position.set(LANE_X[lane], 0, SPAWN_Z - 20);
 
-  const loco = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.8, 5), matGreen);
+  // Main loco body
+  const loco = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.8, 5), locoBodyMats());
   loco.position.set(0, 1.4, 0);
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.2, 2), matGreenDk);
-  nose.position.set(0, 1.1, 3);
-  const horn = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.5, 6), matYellowT);
-  horn.position.set(-0.4, 2.9, 0.5);
-  const headlight = new THREE.Mesh(
-    new THREE.CircleGeometry(0.3, 8),
-    new THREE.MeshLambertMaterial({ color: 0xFFFFAA, emissive: 0xFFFF88, emissiveIntensity: 1 }),
-  );
-  headlight.position.set(0, 1.5, 3.99);
-  group.add(loco, nose, horn, headlight);
+  group.add(loco);
 
-  return { mesh: group, lane, z: SPAWN_Z - 20, type: "incoming_train", jumpable: false, slideOnly: false, extraSpeed: 6 };
+  // Nose (front cowcatcher section) — cartoon FACE goes on its +Z face
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.2, 2), locoNoseMats());
+  nose.position.set(0, 1.1, 3);
+  group.add(nose);
+
+  // Cartoon outline on loco body
+  const outlineLoco = new THREE.Mesh(
+    new THREE.BoxGeometry(2.3, 2.9, 5.1),
+    new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }),
+  );
+  outlineLoco.position.set(0, 1.4, 0);
+  group.add(outlineLoco);
+
+  // Chimney / smoke stack
+  const chimneyGeo = new THREE.CylinderGeometry(0.15, 0.12, 0.7, 8);
+  const chimney    = new THREE.Mesh(chimneyGeo, new THREE.MeshLambertMaterial({ color: 0x111111 }));
+  chimney.position.set(-0.4, 2.95, 0.5);
+  group.add(chimney);
+
+  // Smoke puff ring
+  const puffGeo = new THREE.TorusGeometry(0.22, 0.07, 6, 12);
+  const puff    = new THREE.Mesh(puffGeo, new THREE.MeshLambertMaterial({ color: 0xDDDDDD, transparent: true, opacity: 0.7 }));
+  puff.position.set(-0.4, 3.55, 0.5);
+  group.add(puff);
+
+  // Headlight glow — on top of the face texture
+  const glowGeo  = new THREE.CircleGeometry(0.25, 10);
+  const glowMat  = new THREE.MeshLambertMaterial({ color: 0xFFFFBB, emissive: 0xFFFF88, emissiveIntensity: 2 });
+  const gL = new THREE.Mesh(glowGeo, glowMat);
+  gL.position.set(-0.55, 1.5, 4.02);
+  const gR = gL.clone(); gR.position.set(0.55, 1.5, 4.02);
+  group.add(gL, gR);
+
+  // Yellow stripe on wheels / base
+  const cowcatcher = new THREE.Mesh(
+    new THREE.BoxGeometry(2.0, 0.25, 0.5),
+    new THREE.MeshLambertMaterial({ color: 0xFFCC00 }),
+  );
+  cowcatcher.position.set(0, 0.12, 4.3);
+  group.add(cowcatcher);
+
+  // Wheels for loco
+  const wGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.18, 10);
+  const wMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  for (const z of [-1.5, 0.5]) {
+    for (const x of [-1.1, 1.1]) {
+      const w = new THREE.Mesh(wGeo, wMat);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(x, 0.28, z);
+      group.add(w);
+    }
+  }
+
+  return {
+    mesh: group,
+    lane,
+    z: SPAWN_Z - 20,
+    type: "incoming_train",
+    jumpable: false,
+    slideOnly: false,
+    extraSpeed: 6,
+  };
 }
 
 function makeBox(lane: number): ObstacleData {
@@ -146,18 +539,18 @@ function makeBox(lane: number): ObstacleData {
   return { mesh: group, lane, z: SPAWN_Z, type: "box", jumpable: true, slideOnly: false, extraSpeed: 0 };
 }
 
-// ── main component ────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────
 export function Obstacles({
   speed, playing, playerLane, playerJumping, playerSliding, onHit, onTrainHorn,
 }: ObstaclesProps) {
   const { scene } = useThree();
-  const groupRef        = useRef<THREE.Group>(new THREE.Group());
-  const obsRef          = useRef<ObstacleData[]>([]);
-  const spawnTimerRef   = useRef(0);
+  const groupRef         = useRef<THREE.Group>(new THREE.Group());
+  const obsRef           = useRef<ObstacleData[]>([]);
+  const spawnTimerRef    = useRef(0);
   const incomingTimerRef = useRef(0);
-  const hitCooldownRef  = useRef(0);
-  const onHitRef   = useRef(onHit);
-  const onHornRef  = useRef(onTrainHorn);
+  const hitCooldownRef   = useRef(0);
+  const onHitRef  = useRef(onHit);
+  const onHornRef = useRef(onTrainHorn);
   onHitRef.current  = onHit;
   onHornRef.current = onTrainHorn;
 
@@ -187,15 +580,13 @@ export function Obstacles({
     incomingTimerRef.current += delta;
     if (hitCooldownRef.current > 0) hitCooldownRef.current -= delta;
 
-    // ── spawn regular obstacles ──
+    // Regular obstacles
     const interval = Math.max(0.9, 2.4 - speed * 0.07);
     if (spawnTimerRef.current >= interval) {
       spawnTimerRef.current = 0;
-
       const numObs  = Math.random() < 0.3 ? 2 : 1;
       const safeLane = Math.floor(Math.random() * 3);
       const used     = new Set<number>();
-
       for (let i = 0; i < numObs; i++) {
         let lane = Math.floor(Math.random() * 3);
         let tries = 0;
@@ -203,20 +594,18 @@ export function Obstacles({
           lane = Math.floor(Math.random() * 3); tries++;
         }
         used.add(lane);
-
         const r = Math.random();
         let obs: ObstacleData;
-        if      (r < 0.22) obs = makeBarrier(lane);   // jump OR slide
-        else if (r < 0.44) obs = makeTrainCar(lane);  // jump over
-        else if (r < 0.60) obs = makeBox(lane);       // jump over
-        else               obs = makeLowGate(lane);   // slide ONLY
-
+        if      (r < 0.22) obs = makeBarrier(lane);
+        else if (r < 0.44) obs = makeTrainCar(lane);
+        else if (r < 0.60) obs = makeBox(lane);
+        else               obs = makeLowGate(lane);
         groupRef.current.add(obs.mesh);
         obsRef.current.push(obs);
       }
     }
 
-    // ── incoming train ──
+    // Incoming train
     const incomingInterval = Math.max(12, 20 - speed * 0.3);
     if (incomingTimerRef.current >= incomingInterval) {
       incomingTimerRef.current = 0;
@@ -226,26 +615,25 @@ export function Obstacles({
       onHornRef.current();
     }
 
-    // ── move + collide ──
+    // Move + collision
     const toRemove: ObstacleData[] = [];
     const frameMove = speed * delta;
-
     for (const obs of obsRef.current) {
       const actualMove = frameMove + obs.extraSpeed * delta;
       obs.z += actualMove;
       obs.mesh.position.z = obs.z;
 
       if (hitCooldownRef.current <= 0) {
-        const dx = Math.abs(LANE_X[obs.lane] - LANE_X[playerLane]);
-        const dz = Math.abs(obs.z - PLAYER_Z);
-        const hr = obs.type === "incoming_train" ? 2.2 : obs.type === "train" ? 2.0 : 1.8;
+        const dx  = Math.abs(LANE_X[obs.lane] - LANE_X[playerLane]);
+        const dz  = Math.abs(obs.z - PLAYER_Z);
+        const hr  = obs.type === "incoming_train" ? 2.2 : obs.type === "train" ? 2.0 : 1.8;
         const dzt = Math.max(2.4, actualMove * 4);
 
         let blocked = true;
-        if (obs.jumpable && playerJumping)         blocked = false; // jump clears it
-        if (obs.type === "train" && playerJumping) blocked = false; // trains also jumpable
-        if (playerSliding && !obs.jumpable)        blocked = false; // slide clears low things
-        if (obs.slideOnly && playerJumping)        blocked = true;  // low_gate: jump still blocked
+        if (obs.jumpable && playerJumping)         blocked = false;
+        if (obs.type === "train" && playerJumping) blocked = false;
+        if (playerSliding && !obs.jumpable)        blocked = false;
+        if (obs.slideOnly && playerJumping)        blocked = true;
 
         if (dx < hr && dz < dzt && blocked) {
           hitCooldownRef.current = 1.8;
