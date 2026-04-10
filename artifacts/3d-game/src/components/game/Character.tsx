@@ -7,11 +7,10 @@ import { Lane } from "@/game/useGameStore";
 
 const LANE_X = [-2.5, 0, 2.5];
 const MODEL_SCALE = 1.0;
-
 const JUMP_TIMESCALE = 2.8;
 const SLIDE_TIMESCALE = 1.7;
-const CROSSFADE_IN = 0.12;
-const CROSSFADE_OUT = 0.25;
+const FADE_IN = 0.1;
+const FADE_OUT = 0.2;
 
 interface CharacterProps {
   lane: Lane;
@@ -33,7 +32,6 @@ export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }:
 
   const hitTimerRef = useRef(0);
   const targetXRef = useRef(LANE_X[lane + 1]);
-
   const isJumpingRef = useRef(isJumping);
   const isSlidingRef = useRef(isSliding);
   const onJumpCompleteRef = useRef(onJumpComplete);
@@ -60,10 +58,10 @@ export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }:
     const root = rootRef.current;
 
     while (root.children.length > 0) root.remove(root.children[0]);
-    if (mixerRef.current) {
-      mixerRef.current.stopAllAction();
-      mixerRef.current = null;
-    }
+    if (mixerRef.current) { mixerRef.current.stopAllAction(); mixerRef.current = null; }
+    runActionRef.current = null;
+    jumpActionRef.current = null;
+    slideActionRef.current = null;
 
     const cloned = skeletonClone(gltfScene) as THREE.Object3D;
     cloned.rotation.y = Math.PI;
@@ -75,9 +73,9 @@ export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }:
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         mats.forEach((m) => {
           m.transparent = false;
-          m.opacity = 1;
+          m.alphaTest = 0.05;
           (m as THREE.MeshStandardMaterial).depthWrite = true;
-          (m as THREE.MeshStandardMaterial).side = THREE.FrontSide;
+          (m as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
           m.needsUpdate = true;
         });
       }
@@ -91,7 +89,6 @@ export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }:
     mixerRef.current = mixer;
 
     const find = (name: string) => animations.find((a) => a.name === name);
-
     const runClip = find("Running") ?? find("Run_03") ?? animations[0];
     const jumpClip = find("Run_and_Jump");
     const slideClip = find("slide_light");
@@ -106,7 +103,7 @@ export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }:
       jumpAction.loop = THREE.LoopOnce;
       jumpAction.clampWhenFinished = true;
       jumpAction.timeScale = JUMP_TIMESCALE;
-      jumpAction.enabled = true;
+      jumpAction.play();
       jumpAction.setEffectiveWeight(0);
       jumpActionRef.current = jumpAction;
     }
@@ -116,24 +113,31 @@ export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }:
       slideAction.loop = THREE.LoopOnce;
       slideAction.clampWhenFinished = true;
       slideAction.timeScale = SLIDE_TIMESCALE;
-      slideAction.enabled = true;
+      slideAction.play();
       slideAction.setEffectiveWeight(0);
       slideActionRef.current = slideAction;
     }
 
-    mixer.addEventListener("finished", (e) => {
-      if (e.action === jumpActionRef.current) {
-        e.action.crossFadeTo(runActionRef.current!, CROSSFADE_OUT, false);
-        onJumpCompleteRef.current();
-      }
-    });
+    const onFinished = (e: THREE.Event) => {
+      const finishedAction = (e as unknown as { action: THREE.AnimationAction }).action;
+      const run = runActionRef.current;
+      if (!run) return;
 
+      if (finishedAction === jumpActionRef.current) {
+        finishedAction.crossFadeTo(run, FADE_OUT, false);
+        onJumpCompleteRef.current();
+      } else if (finishedAction === slideActionRef.current) {
+        finishedAction.crossFadeTo(run, FADE_OUT, false);
+      }
+    };
+
+    mixer.addEventListener("finished", onFinished);
     prevJumpingRef.current = false;
     prevSlidingRef.current = false;
 
     return () => {
+      mixer.removeEventListener("finished", onFinished);
       mixer.stopAllAction();
-      mixer.removeEventListener("finished", () => {});
       mixer.uncacheRoot(cloned);
       root.remove(cloned);
     };
@@ -147,33 +151,26 @@ export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }:
 
     const jumping = isJumpingRef.current;
     const sliding = isSlidingRef.current;
+    const run = runActionRef.current;
+    const jump = jumpActionRef.current;
+    const slide = slideActionRef.current;
 
-    if (jumping && !prevJumpingRef.current) {
-      const jump = jumpActionRef.current;
-      const run = runActionRef.current;
-      if (jump && run) {
-        jump.reset();
-        jump.play();
-        run.crossFadeTo(jump, CROSSFADE_IN, false);
-      }
+    if (jumping && !prevJumpingRef.current && jump && run) {
+      jump.time = 0;
+      jump.enabled = true;
+      jump.paused = false;
+      run.crossFadeTo(jump, FADE_IN, false);
     }
 
-    if (sliding && !prevSlidingRef.current) {
-      const slide = slideActionRef.current;
-      const run = runActionRef.current;
-      if (slide && run) {
-        slide.reset();
-        slide.play();
-        run.crossFadeTo(slide, CROSSFADE_IN, false);
-      }
+    if (sliding && !prevSlidingRef.current && slide && run) {
+      slide.time = 0;
+      slide.enabled = true;
+      slide.paused = false;
+      run.crossFadeTo(slide, FADE_IN, false);
     }
 
-    if (!sliding && prevSlidingRef.current) {
-      const slide = slideActionRef.current;
-      const run = runActionRef.current;
-      if (slide && run) {
-        slide.crossFadeTo(run, CROSSFADE_OUT, false);
-      }
+    if (!sliding && prevSlidingRef.current && slide && run) {
+      slide.crossFadeTo(run, FADE_OUT, false);
     }
 
     prevJumpingRef.current = jumping;
