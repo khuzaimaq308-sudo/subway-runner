@@ -16,6 +16,15 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
+## Artifacts
+
+### 3d-game (Subway Runner)
+- **Path**: `artifacts/3d-game/`
+- **Preview**: `/` (root)
+- **Tech**: React + Vite + React Three Fiber + Three.js + Zustand
+- **Description**: A 3D endless runner game inspired by Subway Surfers with a custom character, voice reactions, coins, obstacles, and score tracking. Features 3 lanes, jump mechanics, increasing speed, and browser-based speech synthesis for voice feedback.
+- **Game controls**: Arrow keys / WASD / swipe to switch lanes and jump
+
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages
