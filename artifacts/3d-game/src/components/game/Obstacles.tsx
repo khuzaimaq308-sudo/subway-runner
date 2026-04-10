@@ -39,7 +39,45 @@ const matGateDk  = new THREE.MeshLambertMaterial({ color: 0xAA2200 });
 const matBlack   = new THREE.MeshLambertMaterial({ color: 0x111111 });
 const matYellowT = new THREE.MeshLambertMaterial({ color: 0xFFCC00 });
 
-// ── Canvas texture helpers ────────────────────────────────────────────────
+// ── Image-based region texture helper ────────────────────────────────────
+/**
+ * Crop a specific region (normalised 0-1 coords, top-left origin) from an
+ * image file and return it as a CanvasTexture.  The canvas is pre-filled
+ * with a placeholder colour so the mesh isn't black while the image loads.
+ */
+function makeRegionTex(
+  src: string,
+  sx: number, sy: number, sw: number, sh: number,
+  canvasW: number, canvasH: number,
+  placeholder = "#336699",
+): THREE.CanvasTexture {
+  const cv  = document.createElement("canvas");
+  cv.width  = canvasW;
+  cv.height = canvasH;
+  const ctx = cv.getContext("2d")!;
+  ctx.fillStyle = placeholder;
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  const tex   = new THREE.CanvasTexture(cv);
+  tex.flipY   = false;   // canvas Y already matches image-file Y
+  tex.needsUpdate = true;
+
+  const draw = (img: HTMLImageElement) => {
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    ctx.drawImage(img, sx * iw, sy * ih, sw * iw, sh * ih, 0, 0, canvasW, canvasH);
+    tex.needsUpdate = true;
+  };
+
+  const img = new Image();
+  img.onload = () => draw(img);
+  img.src    = src;
+  if (img.complete) draw(img);  // already cached
+
+  return tex;
+}
+
+// ── Canvas draw helper ────────────────────────────────────────────────────
 function rr(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number, r: number,
@@ -57,6 +95,47 @@ function rr(
   ctx.closePath();
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// train_car.png  = Image 2 (Subway Surfers style, ~1006×1006)
+//   Layout (normalised, top-left origin):
+//     SIDE A  – full width, top 17 %      (sy=0.00, sh=0.17)
+//     FRONT   – left 23 %, rows 19-57 %   (sx=0.00, sy=0.19, sw=0.23, sh=0.38)
+//     SIDE B  – centre, rows 19-42 %      (sx=0.24, sy=0.19, sw=0.54, sh=0.22)
+//     ROOF    – centre, rows 43-57 %      (sx=0.24, sy=0.43, sw=0.54, sh=0.14)
+//     BACK    – right 20 %, rows 19-57 %  (sx=0.80, sy=0.19, sw=0.20, sh=0.38)
+//
+// loco_car.png  = Image 1 (blue graffiti, ~1024×1024)
+//   Layout:
+//     FRONT      – top-left 21 %×19 %     (sx=0.00, sy=0.00, sw=0.21, sh=0.19)
+//     LEFT SIDE  – top strip, right 79 %  (sx=0.21, sy=0.00, sw=0.79, sh=0.19)
+//     RIGHT SIDE – middle strip, 73 %×19% (sx=0.00, sy=0.25, sw=0.73, sh=0.19)
+//     TOP        – bottom-centre 52 %×15% (sx=0.00, sy=0.72, sw=0.52, sh=0.15)
+//     BACK       – right col, middle      (sx=0.80, sy=0.19, sw=0.20, sh=0.37)
+// ─────────────────────────────────────────────────────────────────────────
+const CAR  = "/textures/train_car.png";
+const LOCO = "/textures/loco_car.png";
+
+// Pre-built region textures — created lazily on first use
+const _r: Record<string, THREE.CanvasTexture> = {};
+function R(key: string, src: string, sx: number, sy: number, sw: number, sh: number, w=512, h=256) {
+  return _r[key] ??= makeRegionTex(src, sx, sy, sw, sh, w, h);
+}
+const carSide  = () => R("carSide",  CAR,  0.00, 0.00, 1.00, 0.17, 512, 128);
+const carFront = () => R("carFront", CAR,  0.00, 0.19, 0.23, 0.38, 256, 256);
+const carBack  = () => R("carBack",  CAR,  0.80, 0.19, 0.20, 0.38, 256, 256);
+const carRoof  = () => R("carRoof",  CAR,  0.24, 0.43, 0.54, 0.14, 512, 128);
+const locoSide = () => R("locoSide", LOCO, 0.21, 0.00, 0.79, 0.19, 512, 128);
+const locoFace = () => R("locoFace", LOCO, 0.00, 0.00, 0.21, 0.19, 256, 256);
+const locoRoof = () => R("locoRoof", LOCO, 0.00, 0.72, 0.52, 0.15, 512, 128);
+const locoBack = () => R("locoBack", LOCO, 0.80, 0.19, 0.20, 0.37, 256, 256);
+
+function mat(tex: THREE.CanvasTexture) {
+  return new THREE.MeshLambertMaterial({ map: tex });
+}
+const matDarkBot  = new THREE.MeshLambertMaterial({ color: 0x111122 });
+const matDarkRoof = new THREE.MeshLambertMaterial({ color: 0x223344 });
+
+// ── DEPRECATED procedural helpers (kept for non-train obstacles) ──────────
 /** Side panel of a train car (seen by the player as they run alongside) */
 function makeCarSideTex(): THREE.CanvasTexture {
   const W = 512, H = 256;
@@ -348,31 +427,45 @@ const getCarRoof  = () => (_carRoof  ??= makeCarRoofTex());
 const getLocoFace = () => (_locoFace ??= makeLocoFaceTex());
 const getLocoSide = () => (_locoSide ??= makeLocoSideTex());
 
+// BoxGeometry face order: +X(right), -X(left), +Y(roof), -Y(bot), +Z(back/cam-side), -Z(front/far)
 function carMats() {
-  const side  = new THREE.MeshLambertMaterial({ map: getCarSide() });
-  const end   = new THREE.MeshLambertMaterial({ map: getCarEnd() });
-  const roof  = new THREE.MeshLambertMaterial({ map: getCarRoof() });
-  const bot   = new THREE.MeshLambertMaterial({ color: 0x550000 });
-  // BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
-  return [side, side, roof, bot, end, end];
+  // Sides  : SIDE A strip from train_car.png
+  // Roof   : ROOF region from train_car.png
+  // Bottom : dark
+  // +Z face (player side, rear end of car) : BACK region
+  // -Z face (far end of car, leading edge)  : FRONT region
+  return [
+    mat(carSide()),   // +X
+    mat(carSide()),   // -X
+    mat(carRoof()),   // +Y
+    matDarkBot,       // -Y
+    mat(carBack()),   // +Z  (camera-facing, rear end)
+    mat(carFront()),  // -Z  (leading end, far from camera)
+  ];
 }
 
 function locoBodyMats() {
-  const side = new THREE.MeshLambertMaterial({ map: getLocoSide() });
-  const top  = new THREE.MeshLambertMaterial({ color: 0x226600 });
-  const bot  = new THREE.MeshLambertMaterial({ color: 0x112200 });
-  const end  = new THREE.MeshLambertMaterial({ color: 0x338811 });
-  return [side, side, top, bot, end, end];
+  return [
+    mat(locoSide()),  // +X
+    mat(locoSide()),  // -X
+    mat(locoRoof()),  // +Y
+    matDarkBot,       // -Y
+    mat(locoBack()),  // +Z (rear)
+    mat(locoSide()),  // -Z (front body, nose added separately)
+  ];
 }
 
 function locoNoseMats() {
-  const side = new THREE.MeshLambertMaterial({ color: 0x338811 });
-  const top  = new THREE.MeshLambertMaterial({ color: 0x226600 });
-  const bot  = new THREE.MeshLambertMaterial({ color: 0x112200 });
-  const face = new THREE.MeshLambertMaterial({ map: getLocoFace() });
-  const back = new THREE.MeshLambertMaterial({ color: 0x338811 });
-  // +X, -X, +Y, -Y, +Z (FRONT FACE = face), -Z
-  return [side, side, top, bot, face, back];
+  // Nose box at z=3, body at z=0 → nose +Z face (at z=4) faces the player
+  // (headlight glows are placed at z=4.02 confirming this)
+  return [
+    mat(locoSide()),  // +X
+    mat(locoSide()),  // -X
+    mat(locoRoof()),  // +Y
+    matDarkBot,       // -Y
+    mat(locoFace()),  // +Z ← FRONT FACE, player-facing tip
+    mat(locoSide()),  // -Z  connects to body
+  ];
 }
 
 // ── Non-train obstacle builders ───────────────────────────────────────────
@@ -417,10 +510,10 @@ function makeTrainCar(lane: number): ObstacleData {
   body.position.set(0, 1.1, 0);
   group.add(body);
 
-  // Roof ridge (no texture needed, just geometry detail)
+  // Roof ridge — dark navy to complement the teal texture
   const roof = new THREE.Mesh(
     new THREE.BoxGeometry(1.95, 0.18, 4.3),
-    new THREE.MeshLambertMaterial({ color: 0x881111 }),
+    new THREE.MeshLambertMaterial({ color: 0x1a3a50 }),
   );
   roof.position.set(0, 2.29, 0);
   group.add(roof);
