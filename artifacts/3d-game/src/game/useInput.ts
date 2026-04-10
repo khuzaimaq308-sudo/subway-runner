@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-type InputAction = "left" | "right" | "jump";
+type InputAction = "left" | "right" | "jump" | "slide";
 type InputHandler = (action: InputAction) => void;
 
 export function useInput(onInput: InputHandler, enabled: boolean) {
@@ -16,6 +16,7 @@ export function useInput(onInput: InputHandler, enabled: boolean) {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") handlerRef.current("left");
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") handlerRef.current("right");
       if (e.key === " " || e.key === "ArrowUp" || e.key === "w" || e.key === "W") handlerRef.current("jump");
+      if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") handlerRef.current("slide");
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -35,6 +36,7 @@ export function useInput(onInput: InputHandler, enabled: boolean) {
         else if (dx > 30) handlerRef.current("right");
       } else {
         if (dy < -30) handlerRef.current("jump");
+        else if (dy > 30) handlerRef.current("slide");
       }
     };
 

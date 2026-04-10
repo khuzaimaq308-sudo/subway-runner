@@ -19,12 +19,13 @@ interface GameSceneProps {
   onCoin: () => void;
   onTrainHorn: () => void;
   isJumping: boolean;
+  isSliding: boolean;
   playerY: number;
   onJumpComplete: () => void;
   isHit: boolean;
 }
 
-function GameScene({ onHit, onCoin, onTrainHorn, isJumping, playerY, onJumpComplete, isHit }: GameSceneProps) {
+function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, playerY, onJumpComplete, isHit }: GameSceneProps) {
   const { gameState, speed, lane } = useGameStore();
   const playing = gameState === "playing";
 
@@ -39,7 +40,7 @@ function GameScene({ onHit, onCoin, onTrainHorn, isJumping, playerY, onJumpCompl
       <Environment speed={speed} playing={playing} />
       <Track speed={speed} playing={playing} />
 
-      <Character lane={lane} isJumping={isJumping} isHit={isHit} onJumpComplete={onJumpComplete} />
+      <Character lane={lane} isJumping={isJumping} isSliding={isSliding} isHit={isHit} onJumpComplete={onJumpComplete} />
 
       <Police playerLane={lane} playing={playing} speed={speed} />
 
@@ -48,6 +49,7 @@ function GameScene({ onHit, onCoin, onTrainHorn, isJumping, playerY, onJumpCompl
         playing={playing}
         playerLane={lane + 1}
         playerJumping={isJumping}
+        playerSliding={isSliding}
         playerY={playerY}
         onHit={onHit}
         onTrainHorn={onTrainHorn}
@@ -142,13 +144,15 @@ export function Game() {
   const { play: playSound } = useSound();
 
   const [isJumping, setIsJumping] = useState(false);
+  const [isSliding, setIsSliding] = useState(false);
   const [isHit, setIsHit] = useState(false);
   const [playerY, setPlayerY] = useState(0);
   const [trainWarning, setTrainWarning] = useState(false);
+  const slideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const playing = gameState === "playing";
 
-  const handleInput = useCallback((action: "left" | "right" | "jump") => {
+  const handleInput = useCallback((action: "left" | "right" | "jump" | "slide") => {
     if (!playing) return;
     const currentLane = useGameStore.getState().lane;
     if (action === "left") {
@@ -159,11 +163,17 @@ export function Game() {
       const next = Math.min(1, currentLane + 1) as Lane;
       if (next !== currentLane) { playSound("slide"); useGameStore.getState().setLane(next); }
     }
-    if (action === "jump" && !isJumping) {
+    if (action === "jump" && !isJumping && !isSliding) {
       playSound("jump");
       setIsJumping(true);
     }
-  }, [playing, isJumping, playSound]);
+    if (action === "slide" && !isJumping && !isSliding) {
+      playSound("slide");
+      setIsSliding(true);
+      if (slideTimerRef.current) clearTimeout(slideTimerRef.current);
+      slideTimerRef.current = setTimeout(() => setIsSliding(false), 900);
+    }
+  }, [playing, isJumping, isSliding, playSound]);
 
   useInput(handleInput, playing);
 
@@ -239,6 +249,7 @@ export function Game() {
             onCoin={handleCoin}
             onTrainHorn={handleTrainHorn}
             isJumping={isJumping}
+            isSliding={isSliding}
             playerY={playerY}
             onJumpComplete={handleJumpComplete}
             isHit={isHit}
