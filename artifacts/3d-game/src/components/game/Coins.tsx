@@ -1,13 +1,12 @@
-import { useRef, useEffect, useCallback } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useRef, useEffect } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
-interface Coin {
-  id: number;
+interface CoinData {
+  mesh: THREE.Group;
   lane: number;
   z: number;
   height: number;
-  collected: boolean;
 }
 
 interface CoinsProps {
@@ -20,24 +19,47 @@ interface CoinsProps {
 
 const LANE_X = [-2.5, 0, 2.5];
 const SPAWN_Z = -65;
-const DESPAWN_Z = 8;
+const DESPAWN_Z = 10;
 const PLAYER_Z = 0;
 
-let coinId = 1000;
+let coinIdCounter = 0;
+
+const coinGeo = new THREE.TorusGeometry(0.28, 0.09, 6, 12);
+const coinMat = new THREE.MeshLambertMaterial({ color: 0xFFD700, emissive: 0xFFAA00, emissiveIntensity: 0.3 });
+
+function makeCoin(lane: number, height: number): CoinData {
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(coinGeo, coinMat);
+  group.add(mesh);
+  group.position.set(LANE_X[lane], height, SPAWN_Z);
+  return { mesh: group, lane, z: SPAWN_Z, height };
+}
 
 export function Coins({ speed, playing, playerLane, playerY, onCollect }: CoinsProps) {
-  const coinsRef = useRef<Coin[]>([]);
-  const meshesRef = useRef<Map<number, THREE.Group>>(new Map());
-  const groupRef = useRef<THREE.Group>(null);
+  const { scene } = useThree();
+  const groupRef = useRef<THREE.Group>(new THREE.Group());
+  const coinsRef = useRef<CoinData[]>([]);
   const spawnTimerRef = useRef(0);
   const rotRef = useRef(0);
   const onCollectRef = useRef(onCollect);
   onCollectRef.current = onCollect;
 
   useEffect(() => {
+    const group = groupRef.current;
+    scene.add(group);
+    return () => {
+      scene.remove(group);
+      coinsRef.current.forEach(c => group.remove(c.mesh));
+      coinsRef.current = [];
+    };
+  }, [scene]);
+
+  useEffect(() => {
+    const group = groupRef.current;
+    coinsRef.current.forEach(c => group.remove(c.mesh));
     coinsRef.current = [];
-    meshesRef.current.clear();
     spawnTimerRef.current = 0;
+    rotRef.current = 0;
   }, [playing]);
 
   useFrame((_, delta) => {
@@ -46,76 +68,47 @@ export function Coins({ speed, playing, playerLane, playerY, onCollect }: CoinsP
     rotRef.current += delta * 3;
     spawnTimerRef.current += delta;
 
-    const spawnInterval = Math.max(0.6, 1.4 - speed * 0.02);
-
+    const spawnInterval = Math.max(0.55, 1.3 - speed * 0.018);
     if (spawnTimerRef.current >= spawnInterval) {
       spawnTimerRef.current = 0;
       const lane = Math.floor(Math.random() * 3);
-      const height = Math.random() < 0.3 ? 2.5 : 0.4;
-      const count = Math.random() < 0.5 ? 3 : 1;
+      const height = Math.random() < 0.3 ? 2.5 : 0.45;
+      const count = Math.random() < 0.5 ? Math.floor(Math.random() * 3) + 2 : 1;
+
       for (let i = 0; i < count; i++) {
-        coinsRef.current.push({
-          id: coinId++,
-          lane,
-          z: SPAWN_Z - i * 2,
-          height,
-          collected: false,
-        });
+        const coin = makeCoin(lane, height);
+        coin.z = SPAWN_Z - i * 2.5;
+        coin.mesh.position.z = coin.z;
+        groupRef.current.add(coin.mesh);
+        coinsRef.current.push(coin);
       }
     }
 
-    coinsRef.current = coinsRef.current.filter((coin) => {
-      coin.z += speed * delta;
+    const toRemove: CoinData[] = [];
+    const frameMove = speed * delta;
 
-      const mesh = meshesRef.current.get(coin.id);
-      if (mesh) {
-        mesh.position.z = coin.z;
-        mesh.rotation.y = rotRef.current;
+    for (const coin of coinsRef.current) {
+      coin.z += frameMove;
+      coin.mesh.position.z = coin.z;
+      coin.mesh.rotation.y = rotRef.current;
+
+      const dx = Math.abs(LANE_X[coin.lane] - LANE_X[playerLane]);
+      const dz = Math.abs(coin.z - PLAYER_Z);
+      const dy = Math.abs(coin.height - playerY - 0.6);
+
+      if (dx < 2.0 && dz < Math.max(2.2, frameMove * 3) && dy < 2.0) {
+        toRemove.push(coin);
+        onCollectRef.current();
+      } else if (coin.z > DESPAWN_Z) {
+        toRemove.push(coin);
       }
+    }
 
-      if (!coin.collected) {
-        const dx = Math.abs(LANE_X[coin.lane] - LANE_X[playerLane]);
-        const dy = Math.abs(coin.height - playerY - 0.5);
-        const dz = Math.abs(coin.z - PLAYER_Z);
-
-        if (dx < 1.5 && dz < 1.2 && dy < 1.5) {
-          coin.collected = true;
-          if (mesh) mesh.visible = false;
-          onCollectRef.current();
-        }
-      }
-
-      return coin.z < DESPAWN_Z && !coin.collected;
-    });
-
-    meshesRef.current.forEach((_, id) => {
-      if (!coinsRef.current.find((c) => c.id === id)) {
-        meshesRef.current.delete(id);
-      }
-    });
+    for (const coin of toRemove) {
+      groupRef.current.remove(coin.mesh);
+    }
+    coinsRef.current = coinsRef.current.filter(c => !toRemove.includes(c));
   });
 
-  const setRef = useCallback((id: number, lane: number, height: number) => (el: THREE.Group | null) => {
-    if (el) {
-      meshesRef.current.set(id, el);
-      el.position.x = LANE_X[lane];
-      el.position.y = height;
-      el.position.z = SPAWN_Z;
-    } else {
-      meshesRef.current.delete(id);
-    }
-  }, []);
-
-  return (
-    <group ref={groupRef}>
-      {coinsRef.current.map((coin) => (
-        <group key={coin.id} ref={setRef(coin.id, coin.lane, coin.height)}>
-          <mesh>
-            <torusGeometry args={[0.25, 0.08, 6, 12]} />
-            <meshLambertMaterial color="#FFD700" emissive="#FFD700" emissiveIntensity={0.2} />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  );
+  return null;
 }
