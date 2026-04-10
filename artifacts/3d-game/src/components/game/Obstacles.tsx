@@ -19,7 +19,6 @@ interface ObstaclesProps {
   playerLane: number;
   playerJumping: boolean;
   playerSliding: boolean;
-  playerY: number;
   onHit: () => void;
   onTrainHorn: () => void;
 }
@@ -124,7 +123,7 @@ function makeBox(lane: number): ObstacleData {
   return { mesh: group, lane, z: SPAWN_Z, type: "box", jumpable: false, extraSpeed: 0 };
 }
 
-export function Obstacles({ speed, playing, playerLane, playerJumping, playerSliding, playerY, onHit, onTrainHorn }: ObstaclesProps) {
+export function Obstacles({ speed, playing, playerLane, playerJumping, playerSliding, onHit, onTrainHorn }: ObstaclesProps) {
   const { scene } = useThree();
   const groupRef = useRef<THREE.Group>(new THREE.Group());
   const obsRef = useRef<ObstacleData[]>([]);
@@ -215,8 +214,8 @@ export function Obstacles({ speed, playing, playerLane, playerJumping, playerSli
         const dzThresh = Math.max(2.4, actualSpeed * 4);
 
         let blocked = true;
-        if (obs.jumpable && playerJumping && playerY > 0.6) blocked = false;
-        if (obs.type === "train" && playerJumping && playerY > 1.8) blocked = false;
+        if (obs.jumpable && playerJumping) blocked = false;
+        if (obs.type === "train" && playerJumping) blocked = false;
         if (obs.type === "barrier" && playerSliding) blocked = false;
 
         if (dx < hitRadius && dz < dzThresh && blocked) {

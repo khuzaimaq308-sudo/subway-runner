@@ -20,12 +20,11 @@ interface GameSceneProps {
   onTrainHorn: () => void;
   isJumping: boolean;
   isSliding: boolean;
-  playerY: number;
   onJumpComplete: () => void;
   isHit: boolean;
 }
 
-function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, playerY, onJumpComplete, isHit }: GameSceneProps) {
+function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, onJumpComplete, isHit }: GameSceneProps) {
   const { gameState, speed, lane } = useGameStore();
   const playing = gameState === "playing";
 
@@ -51,7 +50,6 @@ function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, playerY, 
         playerLane={lane + 1}
         playerJumping={isJumping}
         playerSliding={isSliding}
-        playerY={playerY}
         onHit={onHit}
         onTrainHorn={onTrainHorn}
       />
@@ -60,7 +58,6 @@ function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, playerY, 
         speed={speed}
         playing={playing}
         playerLane={lane + 1}
-        playerY={playerY}
         onCollect={onCoin}
       />
     </>
@@ -147,7 +144,6 @@ export function Game() {
   const [isJumping, setIsJumping] = useState(false);
   const [isSliding, setIsSliding] = useState(false);
   const [isHit, setIsHit] = useState(false);
-  const [playerY, setPlayerY] = useState(0);
   const [trainWarning, setTrainWarning] = useState(false);
   const slideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -198,24 +194,7 @@ export function Game() {
 
   const handleJumpComplete = useCallback(() => {
     setIsJumping(false);
-    setPlayerY(0);
   }, []);
-
-  useEffect(() => {
-    if (isJumping) {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 0.05;
-        const y = Math.sin(progress * Math.PI) * 2.8;
-        setPlayerY(y);
-        if (progress >= 1) {
-          clearInterval(interval);
-          setPlayerY(0);
-        }
-      }, 16);
-      return () => clearInterval(interval);
-    }
-  }, [isJumping]);
 
   useEffect(() => {
     if (!playing) return;
@@ -251,7 +230,6 @@ export function Game() {
             onTrainHorn={handleTrainHorn}
             isJumping={isJumping}
             isSliding={isSliding}
-            playerY={playerY}
             onJumpComplete={handleJumpComplete}
             isHit={isHit}
           />

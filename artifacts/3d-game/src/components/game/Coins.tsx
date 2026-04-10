@@ -13,7 +13,6 @@ interface CoinsProps {
   speed: number;
   playing: boolean;
   playerLane: number;
-  playerY: number;
   onCollect: () => void;
 }
 
@@ -35,7 +34,7 @@ function makeCoin(lane: number, height: number): CoinData {
   return { mesh: group, lane, z: SPAWN_Z, height };
 }
 
-export function Coins({ speed, playing, playerLane, playerY, onCollect }: CoinsProps) {
+export function Coins({ speed, playing, playerLane, onCollect }: CoinsProps) {
   const { scene } = useThree();
   const groupRef = useRef<THREE.Group>(new THREE.Group());
   const coinsRef = useRef<CoinData[]>([]);
@@ -94,9 +93,8 @@ export function Coins({ speed, playing, playerLane, playerY, onCollect }: CoinsP
 
       const dx = Math.abs(LANE_X[coin.lane] - LANE_X[playerLane]);
       const dz = Math.abs(coin.z - PLAYER_Z);
-      const dy = Math.abs(coin.height - playerY - 0.6);
 
-      if (dx < 2.0 && dz < Math.max(2.2, frameMove * 3) && dy < 2.0) {
+      if (dx < 2.0 && dz < Math.max(2.2, frameMove * 3)) {
         toRemove.push(coin);
         onCollectRef.current();
       } else if (coin.z > DESPAWN_Z) {
