@@ -54,7 +54,7 @@ export function HUD({ score, lives, coins, visible }: HUDProps) {
             gap: "6px",
           }}
         >
-          <span style={{ fontSize: "20px" }}>🪙</span>
+          <span style={{ fontSize: "20px" }}>⌚</span>
           <span style={{ color: "#FFD700", fontSize: "22px", fontWeight: 700 }}>{coins}</span>
         </div>
 

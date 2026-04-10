@@ -20,7 +20,7 @@ function playCoin(ctx: AudioContext) {
   gain.gain.setValueAtTime(0.35, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
   osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.25);
-  
+
   const osc2 = ctx.createOscillator();
   const gain2 = ctx.createGain();
   osc2.connect(gain2); gain2.connect(ctx.destination);
@@ -111,24 +111,70 @@ function playTrainHorn(ctx: AudioContext) {
   });
 }
 
-type SoundType = "coin" | "slide" | "jump" | "hit" | "trainhorn";
+/** Short muffled thud — left and right feet alternate in pitch */
+function playFootstep(ctx: AudioContext, leftFoot: boolean) {
+  const dur = 0.09;
+  const bufferSize = Math.floor(ctx.sampleRate * dur);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    // White noise with a fast exponential decay
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.2));
+  }
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+
+  // Low-pass for a muffled concrete thud; slightly different freq per foot
+  const filter = ctx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = leftFoot ? 280 : 320;
+
+  // Subtle pitch oscillator underneath for body to the thud
+  const osc = ctx.createOscillator();
+  const oscGain = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(leftFoot ? 65 : 72, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + dur);
+  oscGain.gain.setValueAtTime(0.18, ctx.currentTime);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+  osc.connect(oscGain); oscGain.connect(ctx.destination);
+  osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.38, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+  source.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+  source.start(ctx.currentTime);
+}
+
+type SoundType = "coin" | "slide" | "jump" | "hit" | "trainhorn" | "footstep";
 
 export function useSound() {
-  const cooldowns = useRef<Record<SoundType, number>>({ coin: 0, slide: 0, jump: 0, hit: 0, trainhorn: 0 });
+  const cooldowns = useRef<Record<SoundType, number>>({
+    coin: 0, slide: 0, jump: 0, hit: 0, trainhorn: 0, footstep: 0,
+  });
+  const footLeft = useRef(true);
 
   const play = useCallback((type: SoundType) => {
     const now = Date.now();
-    const gaps: Record<SoundType, number> = { coin: 120, slide: 200, jump: 300, hit: 600, trainhorn: 4000 };
+    const gaps: Record<SoundType, number> = {
+      coin: 120, slide: 200, jump: 300, hit: 600, trainhorn: 4000, footstep: 60,
+    };
     if (now - cooldowns.current[type] < gaps[type]) return;
     cooldowns.current[type] = now;
 
     try {
       const ctx = getCtx();
-      if (type === "coin") playCoin(ctx);
+      if (type === "coin")      playCoin(ctx);
       else if (type === "slide") playSlide(ctx);
-      else if (type === "jump") playJump(ctx);
-      else if (type === "hit") playHit(ctx);
+      else if (type === "jump")  playJump(ctx);
+      else if (type === "hit")   playHit(ctx);
       else if (type === "trainhorn") playTrainHorn(ctx);
+      else if (type === "footstep") {
+        playFootstep(ctx, footLeft.current);
+        footLeft.current = !footLeft.current;
+      }
     } catch (_) {}
   }, []);
 

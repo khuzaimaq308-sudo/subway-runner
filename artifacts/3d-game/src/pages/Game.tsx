@@ -153,6 +153,39 @@ function ScoreLoop() {
   return null;
 }
 
+/** Fires footstep sounds rhythmically while the character is running on the ground */
+function FootstepLoop({
+  isJumping,
+  isSliding,
+  onStep,
+}: {
+  isJumping: boolean;
+  isSliding: boolean;
+  onStep: () => void;
+}) {
+  const { gameState, speed } = useGameStore();
+  const playing = gameState === "playing";
+  const stepTimerRef = useRef(0);
+  const onStepRef = useRef(onStep);
+  onStepRef.current = onStep;
+
+  useFrame((_, delta) => {
+    if (!playing || isJumping || isSliding) {
+      stepTimerRef.current = 0;
+      return;
+    }
+    stepTimerRef.current += delta;
+    // Step interval: ~0.38s at normal speed, shrinks as player speeds up
+    const interval = Math.max(0.17, 0.42 - speed * 0.012);
+    if (stepTimerRef.current >= interval) {
+      stepTimerRef.current = 0;
+      onStepRef.current();
+    }
+  });
+
+  return null;
+}
+
 export function Game() {
   const { gameState, score, highScore, lives, coins, speed, lane, startGame, goToMenu, setSpeed } =
     useGameStore();
@@ -234,6 +267,7 @@ export function Game() {
           dpr={[1, 1.5]}
         >
           <ScoreLoop />
+          <FootstepLoop isJumping={isJumping} isSliding={isSliding} onStep={() => playSound("footstep")} />
           <GameScene
             onHit={handleHit}
             onCoin={handleCoin}
