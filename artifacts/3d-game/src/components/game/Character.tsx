@@ -1,13 +1,12 @@
-import { useRef, useEffect, useState } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useRef, useEffect } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Lane } from "@/game/useGameStore";
 
 const LANE_X = [-2.5, 0, 2.5];
-const MODEL_SCALE = 0.92;
-const MODEL_Y_OFFSET = 0;
+const MODEL_SCALE = 1.0;
 
 interface CharacterProps {
   lane: Lane;
@@ -18,48 +17,55 @@ interface CharacterProps {
 }
 
 export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }: CharacterProps) {
-  const groupRef = useRef<THREE.Group>(null);
-  const { scene, animations } = useGLTF("/models/character.glb");
+  const { scene } = useThree();
+  const { scene: gltfScene, animations } = useGLTF("/models/character.glb");
 
+  const rootRef = useRef<THREE.Group>(new THREE.Group());
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const runActionRef = useRef<THREE.AnimationAction | null>(null);
-  const [clonedScene, setClonedScene] = useState<THREE.Object3D | null>(null);
-
   const jumpProgressRef = useRef(0);
   const hitTimerRef = useRef(0);
   const targetXRef = useRef(LANE_X[lane + 1]);
-  const slideTimerRef = useRef(0);
-  const prevSlidingRef = useRef(false);
+  const isJumpingRef = useRef(isJumping);
+  const isHitRef = useRef(isHit);
+  const isSlidingRef = useRef(isSliding);
+  const onJumpCompleteRef = useRef(onJumpComplete);
+
+  isJumpingRef.current = isJumping;
+  isSlidingRef.current = isSliding;
+  onJumpCompleteRef.current = onJumpComplete;
 
   useEffect(() => { targetXRef.current = LANE_X[lane + 1]; }, [lane]);
   useEffect(() => { if (isJumping) jumpProgressRef.current = 0; }, [isJumping]);
-  useEffect(() => { if (isHit) hitTimerRef.current = 0.5; }, [isHit]);
+  useEffect(() => { if (isHit) { hitTimerRef.current = 0.5; } }, [isHit]);
 
   useEffect(() => {
-    if (!scene || animations.length === 0) return;
+    const root = rootRef.current;
+    root.position.set(LANE_X[1], 0, 0);
+    root.scale.setScalar(MODEL_SCALE);
+    scene.add(root);
+    return () => { scene.remove(root); };
+  }, [scene]);
 
-    const cloned = skeletonClone(scene) as THREE.Object3D;
+  useEffect(() => {
+    if (!gltfScene || animations.length === 0) return;
+    const root = rootRef.current;
+
+    while (root.children.length > 0) root.remove(root.children[0]);
+    if (mixerRef.current) { mixerRef.current.stopAllAction(); mixerRef.current = null; }
+
+    const cloned = skeletonClone(gltfScene) as THREE.Object3D;
 
     cloned.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh) {
         mesh.frustumCulled = false;
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        mesh.material = mats.map((m: THREE.Material) => {
-          const src = m as THREE.MeshStandardMaterial;
-          return new THREE.MeshLambertMaterial({
-            map: src.map ?? undefined,
-            color: src.color ?? new THREE.Color(1, 1, 1),
-            skinning: true,
-          } as THREE.MeshLambertMaterialParameters & { skinning?: boolean });
-        });
       }
     });
 
     const box = new THREE.Box3().setFromObject(cloned);
-    const size = new THREE.Vector3();
-    box.getSize(size);
     cloned.position.y = -box.min.y;
+
+    root.add(cloned);
 
     const mixer = new THREE.AnimationMixer(cloned);
     mixerRef.current = mixer;
@@ -69,70 +75,58 @@ export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }:
       animations.find((a) => a.name === "Run_03") ??
       animations[0];
 
-    if (runClip) {
-      const action = mixer.clipAction(runClip);
-      action.play();
-      runActionRef.current = action;
-    }
-
-    setClonedScene(cloned);
+    if (runClip) mixer.clipAction(runClip).play();
 
     return () => {
       mixer.stopAllAction();
       mixer.uncacheRoot(cloned);
+      root.remove(cloned);
     };
-  }, [scene, animations]);
+  }, [gltfScene, animations]);
 
   useFrame((_, delta) => {
-    if (!groupRef.current) return;
+    const root = rootRef.current;
+    if (!root) return;
 
-    if (mixerRef.current) {
-      mixerRef.current.update(delta);
-    }
+    if (mixerRef.current) mixerRef.current.update(delta);
 
-    const currentX = groupRef.current.position.x;
-    groupRef.current.position.x += (targetXRef.current - currentX) * Math.min(1, delta * 14);
+    const currentX = root.position.x;
+    root.position.x += (targetXRef.current - currentX) * Math.min(1, delta * 14);
 
-    if (isJumping) {
-      jumpProgressRef.current = Math.min(1, jumpProgressRef.current + delta * 2.0);
+    const jumping = isJumpingRef.current;
+    const sliding = isSlidingRef.current;
+
+    if (jumping) {
+      jumpProgressRef.current = Math.min(1, jumpProgressRef.current + delta * 2.2);
       const arc = Math.sin(jumpProgressRef.current * Math.PI);
-      groupRef.current.position.y = MODEL_Y_OFFSET + arc * 2.6;
-      groupRef.current.rotation.x = arc * -0.18;
+      root.position.y = arc * 2.6;
+      root.rotation.x = arc * -0.18;
       if (jumpProgressRef.current >= 1) {
-        groupRef.current.position.y = MODEL_Y_OFFSET;
-        groupRef.current.rotation.x = 0;
-        onJumpComplete();
+        root.position.y = 0;
+        root.rotation.x = 0;
+        isJumpingRef.current = false;
+        jumpProgressRef.current = 0;
+        onJumpCompleteRef.current();
       }
-    } else if (isSliding) {
-      if (!prevSlidingRef.current) slideTimerRef.current = 0;
-      slideTimerRef.current += delta;
-      const t = Math.min(slideTimerRef.current * 8, 1);
-      const targetY = MODEL_Y_OFFSET - 0.65;
-      groupRef.current.position.y += (targetY - groupRef.current.position.y) * Math.min(1, delta * 18);
-      groupRef.current.rotation.x = -0.25 * t;
-      const s = 1 - 0.32 * t;
-      groupRef.current.scale.setScalar(MODEL_SCALE * s);
+    } else if (sliding) {
+      root.position.y += (-0.6 - root.position.y) * Math.min(1, delta * 18);
+      root.rotation.x = -0.28;
+      root.scale.setScalar(MODEL_SCALE * 0.7);
     } else {
-      groupRef.current.position.y += (MODEL_Y_OFFSET - groupRef.current.position.y) * Math.min(1, delta * 14);
-      groupRef.current.rotation.x += (0 - groupRef.current.rotation.x) * Math.min(1, delta * 12);
-      groupRef.current.scale.setScalar(MODEL_SCALE);
+      root.position.y += (0 - root.position.y) * Math.min(1, delta * 14);
+      root.rotation.x += (0 - root.rotation.x) * Math.min(1, delta * 12);
+      root.scale.setScalar(MODEL_SCALE);
     }
-
-    prevSlidingRef.current = isSliding;
 
     if (hitTimerRef.current > 0) {
       hitTimerRef.current -= delta;
-      groupRef.current.rotation.z = Math.sin(hitTimerRef.current * 28) * 0.22;
+      root.rotation.z = Math.sin(hitTimerRef.current * 28) * 0.22;
     } else {
-      groupRef.current.rotation.z *= 0.8;
+      root.rotation.z *= 0.8;
     }
   });
 
-  return (
-    <group ref={groupRef} position={[LANE_X[1], MODEL_Y_OFFSET, 0]} scale={MODEL_SCALE}>
-      {clonedScene && <primitive object={clonedScene} />}
-    </group>
-  );
+  return null;
 }
 
 useGLTF.preload("/models/character.glb");
