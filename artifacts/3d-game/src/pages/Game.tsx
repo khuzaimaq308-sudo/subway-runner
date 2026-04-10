@@ -2,7 +2,6 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { PerspectiveCamera } from "@react-three/drei";
 import { useGameStore, Lane } from "@/game/useGameStore";
-import { useVoice } from "@/game/useVoice";
 import { useSound } from "@/game/useSound";
 import { useInput } from "@/game/useInput";
 import { Character } from "@/components/game/Character";
@@ -119,20 +118,12 @@ function ScoreLoop() {
   const playing = gameState === "playing";
   const scoreTimerRef = useRef(0);
   const milestoneRef = useRef(0);
-  const { speak } = useVoice();
-
   useFrame((_, delta) => {
     if (!playing) return;
     scoreTimerRef.current += delta;
     if (scoreTimerRef.current >= 0.1) {
       scoreTimerRef.current = 0;
       addScore(1);
-      const score = useGameStore.getState().score;
-      const milestone = Math.floor(score / 500);
-      if (milestone > milestoneRef.current) {
-        milestoneRef.current = milestone;
-        speak("milestone");
-      }
     }
   });
 
@@ -148,7 +139,6 @@ function ScoreLoop() {
 
 export function Game() {
   const { gameState, score, highScore, lives, coins, speed, lane, startGame, goToMenu, setSpeed } = useGameStore();
-  const { speak } = useVoice();
   const { play: playSound } = useSound();
 
   const [isJumping, setIsJumping] = useState(false);
@@ -179,17 +169,15 @@ export function Game() {
 
   const handleHit = useCallback(() => {
     playSound("hit");
-    speak("hit");
     setIsHit(true);
     useGameStore.getState().loseLife();
     setTimeout(() => setIsHit(false), 600);
-  }, [playSound, speak]);
+  }, [playSound]);
 
   const handleCoin = useCallback(() => {
     playSound("coin");
-    speak("coin");
     useGameStore.getState().addCoin();
-  }, [playSound, speak]);
+  }, [playSound]);
 
   const handleTrainHorn = useCallback(() => {
     playSound("trainhorn");
@@ -228,9 +216,8 @@ export function Game() {
   }, [playing, setSpeed]);
 
   const handleStart = useCallback(() => {
-    speak("start");
     startGame();
-  }, [speak, startGame]);
+  }, [startGame]);
 
   return (
     <WebGLCheck>
