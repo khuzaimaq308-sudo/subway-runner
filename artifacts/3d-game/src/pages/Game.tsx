@@ -32,10 +32,11 @@ function GameScene({ onHit, onCoin, onTrainHorn, isJumping, isSliding, playerY, 
   return (
     <>
       <color attach="background" args={["#87CEEB"]} />
-      <ambientLight intensity={1.8} color="#FFFFFF" />
-      <directionalLight position={[8, 20, 10]} intensity={2.5} color="#FFF9E6" castShadow={false} />
-      <hemisphereLight args={["#87CEEB", "#7CFC00", 0.6]} />
-      <PerspectiveCamera makeDefault position={[0, 4.5, 8]} fov={65} rotation={[-0.2, 0, 0]} />
+      <ambientLight intensity={2.5} color="#FFFFFF" />
+      <directionalLight position={[5, 14, 8]} intensity={3.5} color="#FFF8E0" castShadow={false} />
+      <directionalLight position={[-4, 8, 6]} intensity={1.8} color="#FFFFFF" castShadow={false} />
+      <hemisphereLight args={["#87CEEB", "#90EE90", 1.2]} />
+      <PerspectiveCamera makeDefault position={[0, 3.0, 6.5]} fov={72} rotation={[-0.18, 0, 0]} />
 
       <Environment speed={speed} playing={playing} />
       <Track speed={speed} playing={playing} />

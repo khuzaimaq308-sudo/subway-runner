@@ -55,10 +55,20 @@ export function Character({ lane, isJumping, isHit, isSliding, onJumpComplete }:
 
     const cloned = skeletonClone(gltfScene) as THREE.Object3D;
 
+    cloned.rotation.y = Math.PI;
+
     cloned.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (mesh.isMesh) {
         mesh.frustumCulled = false;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((m) => {
+          m.transparent = false;
+          m.opacity = 1;
+          (m as THREE.MeshStandardMaterial).depthWrite = true;
+          (m as THREE.MeshStandardMaterial).side = THREE.FrontSide;
+          m.needsUpdate = true;
+        });
       }
     });
 
