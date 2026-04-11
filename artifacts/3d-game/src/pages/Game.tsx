@@ -141,7 +141,9 @@ function GameScene({
         playerJumping={isJumping}
         playerSliding={isSliding}
         playerOnTrain={onTrain}
+        playerJetpack={isJetpack}
         onHit={onHit}
+        onCoin={onCoin}
         onTrainHorn={onTrainHorn}
         onMountTrain={onMountTrain}
         onDismountTrain={onDismountTrain}
