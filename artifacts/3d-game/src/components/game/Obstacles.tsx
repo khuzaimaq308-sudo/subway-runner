@@ -44,29 +44,19 @@ const _txLoader = new THREE.TextureLoader();
 let _carBase:  THREE.Texture | null = null;
 let _locoBase: THREE.Texture | null = null;
 
-function getCarBase()  { return _carBase  ??= _txLoader.load("/textures/train_car.png"); }
-function getLocoBase() { return _locoBase ??= _txLoader.load("/textures/loco_car.png"); }
+const _BASE = import.meta.env.BASE_URL as string;   // e.g. "/3d-game/"
+function getCarBase()  { return _carBase  ??= _txLoader.load(`${_BASE}textures/train_car.png`); }
+function getLocoBase() { return _locoBase ??= _txLoader.load(`${_BASE}textures/loco_car.png`); }
 
-/**
- * Clone a loaded texture and apply a UV sub-region.
- *
- * Three.js uses BOTTOM-LEFT as UV origin (with the default flipY=true).
- * To convert from image-file coords (top=0, down+):
- *   vOff = 1 - (imageRowTop + imageRowHeight)
- *   vRep = imageRowHeight
- */
-function regionMat(
-  base: THREE.Texture,
-  uOff: number, vOff: number,
-  uRep: number, vRep: number,
-): THREE.MeshLambertMaterial {
-  const t = base.clone();
-  t.needsUpdate = true;
-  t.wrapS = THREE.ClampToEdgeWrapping;
-  t.wrapT = THREE.ClampToEdgeWrapping;
-  t.offset.set(uOff, vOff);
-  t.repeat.set(uRep, vRep);
-  return new THREE.MeshLambertMaterial({ map: t });
+// Cached single-material instances (created lazily so textures are shared)
+let _carMat:  THREE.MeshLambertMaterial | null = null;
+let _locoMat: THREE.MeshLambertMaterial | null = null;
+
+function getCarMat()  {
+  return _carMat  ??= new THREE.MeshLambertMaterial({ map: getCarBase() });
+}
+function getLocoMat() {
+  return _locoMat ??= new THREE.MeshLambertMaterial({ map: getLocoBase() });
 }
 
 // ── Canvas draw helper ────────────────────────────────────────────────────
@@ -108,44 +98,11 @@ function rr(
 
 const matDarkBot = new THREE.MeshLambertMaterial({ color: 0x111122 });
 
-// BoxGeometry face order: +X, -X, +Y(top), -Y(bot), +Z, -Z
-// ── train_car.png materials ────────────────────────────────────────────────
-function carMats() {
-  const b = getCarBase();
-  return [
-    regionMat(b, 0.00, 0.83, 1.00, 0.17),  // +X side   – SIDE A
-    regionMat(b, 0.00, 0.83, 1.00, 0.17),  // -X side   – SIDE A
-    regionMat(b, 0.24, 0.43, 0.54, 0.14),  // +Y roof   – ROOF panel
-    matDarkBot,                              // -Y bottom
-    regionMat(b, 0.80, 0.43, 0.20, 0.38),  // +Z end    – BACK panel
-    regionMat(b, 0.00, 0.43, 0.23, 0.38),  // -Z end    – FRONT panel
-  ];
-}
-
-// ── loco_car.png materials ─────────────────────────────────────────────────
-function locoBodyMats() {
-  const b = getLocoBase();
-  return [
-    regionMat(b, 0.21, 0.81, 0.79, 0.19),  // +X side   – LEFT SIDE strip
-    regionMat(b, 0.21, 0.81, 0.79, 0.19),  // -X side   – LEFT SIDE strip
-    regionMat(b, 0.00, 0.13, 0.52, 0.15),  // +Y roof   – TOP panel
-    matDarkBot,                              // -Y bottom
-    regionMat(b, 0.80, 0.44, 0.20, 0.37),  // +Z rear   – BACK
-    regionMat(b, 0.21, 0.81, 0.79, 0.19),  // -Z (body front, nose covers it)
-  ];
-}
-
-function locoNoseMats() {
-  const b = getLocoBase();
-  return [
-    regionMat(b, 0.21, 0.81, 0.79, 0.19),  // +X side   – LEFT SIDE strip
-    regionMat(b, 0.21, 0.81, 0.79, 0.19),  // -X side
-    regionMat(b, 0.00, 0.13, 0.52, 0.15),  // +Y roof
-    matDarkBot,                              // -Y bottom
-    regionMat(b, 0.00, 0.81, 0.21, 0.19),  // +Z FRONT face (player-facing tip)
-    regionMat(b, 0.21, 0.81, 0.79, 0.19),  // -Z (connects to body)
-  ];
-}
+// Single shared material per train type — simplest reliable approach.
+// The TextureLoader updates the material automatically when the image loads.
+function carMats()      { const m = getCarMat();  return [m, m, m, matDarkBot, m, m]; }
+function locoBodyMats() { const m = getLocoMat(); return [m, m, m, matDarkBot, m, m]; }
+function locoNoseMats() { const m = getLocoMat(); return [m, m, m, matDarkBot, m, m]; }
 
 // ── DEPRECATED procedural helpers (kept for non-train obstacles) ──────────
 /** Side panel of a train car (seen by the player as they run alongside) */
