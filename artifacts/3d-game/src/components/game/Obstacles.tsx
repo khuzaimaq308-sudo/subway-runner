@@ -590,25 +590,31 @@ export function Obstacles({
     if (hitCooldownRef.current > 0) hitCooldownRef.current -= delta;
 
     // Regular obstacles
-    const interval = Math.max(0.9, 2.4 - speed * 0.07);
+    const interval = Math.max(1.4, 3.2 - speed * 0.07);
     if (spawnTimerRef.current >= interval) {
       spawnTimerRef.current = 0;
-      const numObs  = Math.random() < 0.3 ? 2 : 1;
-      const safeLane = Math.floor(Math.random() * 3);
-      const used     = new Set<number>();
+      const numObs = Math.random() < 0.28 ? 2 : 1;
+
+      // For double-obstacle waves always keep player's lane free.
+      // For single-obstacle waves keep player's lane free 65% of the time
+      // (35% of single spawns can land in the player's lane – intentional challenge).
+      const blockPlayer = numObs > 1 || Math.random() < 0.65;
+      const safeLane    = blockPlayer ? playerLane : -1;   // -1 means "no safe lane"
+
+      const used = new Set<number>();
       for (let i = 0; i < numObs; i++) {
-        let lane = Math.floor(Math.random() * 3);
+        let lane  = Math.floor(Math.random() * 3);
         let tries = 0;
-        while ((used.has(lane) || (numObs > 1 && lane === safeLane)) && tries < 8) {
+        while ((used.has(lane) || lane === safeLane) && tries < 10) {
           lane = Math.floor(Math.random() * 3); tries++;
         }
         used.add(lane);
         const r = Math.random();
         let obs: ObstacleData;
-        if      (r < 0.22) obs = makeBarrier(lane);
-        else if (r < 0.44) obs = makeTrainCar(lane);
-        else if (r < 0.60) obs = makeBox(lane);
-        else               obs = makeLowGate(lane);
+        if      (r < 0.25) obs = makeBarrier(lane);
+        else if (r < 0.48) obs = makeTrainCar(lane);
+        else if (r < 0.72) obs = makeBox(lane);
+        else               obs = makeLowGate(lane);   // 28% → was 40%
         groupRef.current.add(obs.mesh);
         obsRef.current.push(obs);
       }
@@ -639,13 +645,13 @@ export function Obstacles({
         const dzt = Math.max(2.4, actualMove * 4);
 
         let blocked = true;
-        if (obs.jumpable && playerJumping)         blocked = false;
-        if (obs.type === "train" && playerJumping) blocked = false;
-        if (playerSliding && !obs.jumpable)        blocked = false;
-        if (obs.slideOnly && playerJumping)        blocked = true;
+        if (obs.jumpable && playerJumping)                                    blocked = false;
+        if ((obs.type === "train" || obs.type === "incoming_train") && playerJumping) blocked = false;
+        if (playerSliding && !obs.jumpable)                                   blocked = false;
+        if (obs.slideOnly && playerJumping)                                   blocked = true;
 
         if (dx < hr && dz < dzt && blocked) {
-          hitCooldownRef.current = 1.8;
+          hitCooldownRef.current = 2.2;   // was 1.8 — wider grace window after a hit
           onHitRef.current();
         }
       }
