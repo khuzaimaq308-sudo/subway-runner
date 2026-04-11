@@ -163,17 +163,16 @@ export function Coins({ speed, playing, playerLane, onCollect }: CoinsProps) {
         w.mesh.position.x = w.attractX;
       }
 
-      const onGround = pwr !== "jetpack";
-      const bobY = onGround ? WATCH_Y + Math.sin(timeRef.current * 2.5 + w.bobOffset) * 0.055 : 2.8;
+      // Coins always stay at ground level — collected by player passing through lane
+      const bobY = WATCH_Y + Math.sin(timeRef.current * 2.5 + w.bobOffset) * 0.055;
       w.mesh.position.y = bobY;
       w.mesh.rotation.y = timeRef.current * 0.52;
 
-      // Collect logic
+      // Collect logic — same radius regardless of powerup
       const dx = Math.abs(w.attractX - playerX);
       const dz = Math.abs(w.z - PLAYER_Z);
 
-      // Jetpack: wide auto-collect radius (player is flying)
-      const xRadius = pwr === "jetpack" ? 5.5 : (pwr === "magnet" ? 1.5 : 2.0);
+      const xRadius = pwr === "magnet" ? 1.5 : 2.0;
       const zRadius = Math.max(2.2, frameMove * 3);
 
       if (dx < xRadius && dz < zRadius) {

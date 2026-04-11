@@ -17,7 +17,7 @@ import { MenuScreen } from "@/components/ui/MenuScreen";
 import { GameOverScreen } from "@/components/ui/GameOverScreen";
 
 // ── Camera ────────────────────────────────────────────────────────────────
-function CameraRig({ isJumping, speed, isDancing, isOnTrain }: { isJumping: boolean; speed: number; isDancing: boolean; isOnTrain: boolean }) {
+function CameraRig({ isJumping, speed, isDancing, isOnTrain, isJetpack }: { isJumping: boolean; speed: number; isDancing: boolean; isOnTrain: boolean; isJetpack: boolean }) {
   const { camera } = useThree();
   const camYRef    = useRef(4.4);
   const camZRef    = useRef(4.4);
@@ -45,6 +45,13 @@ function CameraRig({ isJumping, speed, isDancing, isOnTrain }: { isJumping: bool
       const pc = camera as THREE.PerspectiveCamera;
       pc.fov += (58 - pc.fov) * Math.min(1, delta * 3);
       pc.updateProjectionMatrix();
+    } else if (isJetpack) {
+      // Camera rises with player (player is at Y=7); pull back further so we see the full flight
+      camYRef.current  += (11.5 - camYRef.current)  * Math.min(1, delta * 3);
+      camZRef.current  += (7.5  - camZRef.current)  * smooth;
+      camXRef.current  += (0    - camXRef.current)  * smooth;
+      lookYRef.current += (4.0  - lookYRef.current) * smooth;
+      lookZRef.current += (-10  - lookZRef.current) * smooth;
     } else {
       const targetY = isOnTrain ? 6.0 : (isJumping ? 5.0 : 4.4);
       camYRef.current  += (targetY - camYRef.current) * Math.min(1, delta * 5);
@@ -115,7 +122,7 @@ function GameScene({
       <hemisphereLight args={["#87CEEB", "#4aaa30", 1.0]} />
 
       <PowerupTicker />
-      <CameraRig isJumping={isJumping} speed={speed} isDancing={dancing} isOnTrain={onTrain} />
+      <CameraRig isJumping={isJumping} speed={speed} isDancing={dancing} isOnTrain={onTrain} isJetpack={isJetpack} />
       <Environment speed={speed} playing={playing} />
       <Track speed={speed} playing={playing} />
 

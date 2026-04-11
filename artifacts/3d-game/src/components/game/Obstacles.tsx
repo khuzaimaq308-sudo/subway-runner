@@ -441,13 +441,12 @@ export function Obstacles({
         else if (r < 0.82) obs = makeLowGate(lane);
         else {                                           // 18% ramp trains + companions
           obs = makeRampTrain(lane);
-          // Spawn 1-2 colorful companion train cars in adjacent lanes
+          // Spawn companion ramp trains in adjacent lanes — player can jump between them
           const adjLanes = [0, 1, 2].filter(l => l !== lane);
           const numComp  = Math.random() < 0.6 ? 2 : 1;
           for (let c = 0; c < numComp && c < adjLanes.length; c++) {
             const compLane = adjLanes[c];
-            const roofZs = [Math.random() * 2 - 1, Math.random() * 2 + 0.5];
-            const comp = makeTrainCar(compLane, roofZs);
+            const comp = makeRampTrain(compLane); // ramp_train so mount/dismount works
             groupRef.current.add(comp.mesh);
             obsRef.current.push(comp);
           }
@@ -517,12 +516,11 @@ export function Obstacles({
         const dx = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
         const hr = obs.type === "incoming_train" ? 1.5 : obs.type === "train" || obs.type === "ramp_train" ? 1.3 : 1.1;
 
-        // Tight collision: halfZ + 12cm buffer + ONE frame look-ahead.
-        // Previously used actualMove*4 (4-frame look-ahead) which caused the
-        // player to die visually far from the obstacle.
+        // Collision window: front face arrives → back face clears the player.
+        // pastWindow = obs.halfZ so we keep collision active until obstacle fully passes.
         const aheadWindow    = obs.halfZ + 0.12;
         const effectiveAhead = aheadWindow + actualMove;
-        const pastWindow     = 0.4;
+        const pastWindow     = obs.halfZ;   // full obstacle depth — no more ghost-passing
         const signedDz       = obs.z - PLAYER_Z;
 
         if (dx < hr && signedDz > -effectiveAhead && signedDz < pastWindow) {
@@ -537,8 +535,9 @@ export function Obstacles({
             continue; // still approaching or just mounted — no hit
           }
 
-          // Skip ground obstacles when riding on top of any train
-          if (playerOnTrain) continue;
+          // When on a ramp train, skip GROUND obstacles (they're below the player).
+          // Incoming trains at track height can still kill.
+          if (playerOnTrain && obs.type !== "incoming_train") continue;
 
           // Normal collision
           let blocked = true;
