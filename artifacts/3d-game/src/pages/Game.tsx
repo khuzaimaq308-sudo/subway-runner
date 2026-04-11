@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useGameStore, Lane } from "@/game/useGameStore";
-import { useSound } from "@/game/useSound";
+import { useSound, startHipHopBeat, stopHipHopBeat } from "@/game/useSound";
 import { useInput } from "@/game/useInput";
 import { Character } from "@/components/game/Character";
 import { Track } from "@/components/game/Track";
@@ -186,27 +186,6 @@ function FootstepLoop({ isJumping, isSliding, onStep }: { isJumping: boolean; is
   return null;
 }
 
-// ── Dance HUD overlay ─────────────────────────────────────────────────────
-function DanceOverlay({ visible }: { visible: boolean }) {
-  if (!visible) return null;
-  return (
-    <div style={{
-      position: "fixed", inset: 0, display: "flex", alignItems: "center",
-      justifyContent: "center", pointerEvents: "none", zIndex: 30,
-    }}>
-      <div style={{
-        fontSize: "clamp(28px,5vw,52px)", fontWeight: 900,
-        color: "#FFD700", textShadow: "0 0 20px #FF8800, 0 3px 0 #000",
-        fontFamily: "system-ui",
-        animation: "dancePop 0.4s ease-out",
-        letterSpacing: "2px",
-      }}>
-        🎉 GOLDEN WATCH! 🎉
-      </div>
-    </div>
-  );
-}
-
 // ── Root component ────────────────────────────────────────────────────────
 export function Game() {
   const { gameState, score, highScore, coins, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance } =
@@ -266,9 +245,11 @@ export function Game() {
     playSound("coin");
     useGameStore.getState().addScore(200);
     startDance();
+    startHipHopBeat();
   }, [playSound, startDance]);
 
   const handleDanceEnd = useCallback(() => {
+    stopHipHopBeat();
     endDance();
   }, [endDance]);
 
@@ -284,14 +265,6 @@ export function Game() {
 
   return (
     <WebGLCheck>
-      <style>{`
-        @keyframes dancePop {
-          0%  { transform: scale(0.5) rotate(-8deg); opacity: 0; }
-          60% { transform: scale(1.15) rotate(3deg); opacity: 1; }
-          100%{ transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-      `}</style>
-
       <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#87CEEB" }}>
         <Canvas
           shadows={false}
@@ -314,7 +287,6 @@ export function Game() {
         </Canvas>
 
         <HUD score={score} coins={coins} visible={playing || dancing} />
-        <DanceOverlay visible={dancing} />
 
         {gameState === "menu" && (
           <MenuScreen onStart={startGame} highScore={highScore} />

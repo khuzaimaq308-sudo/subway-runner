@@ -111,26 +111,19 @@ function playTrainHorn(ctx: AudioContext) {
   });
 }
 
-/** Short muffled thud — left and right feet alternate in pitch */
 function playFootstep(ctx: AudioContext, leftFoot: boolean) {
   const dur = 0.09;
   const bufferSize = Math.floor(ctx.sampleRate * dur);
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < bufferSize; i++) {
-    // White noise with a fast exponential decay
     data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.2));
   }
-
   const source = ctx.createBufferSource();
   source.buffer = buffer;
-
-  // Low-pass for a muffled concrete thud; slightly different freq per foot
   const filter = ctx.createBiquadFilter();
   filter.type = "lowpass";
   filter.frequency.value = leftFoot ? 280 : 320;
-
-  // Subtle pitch oscillator underneath for body to the thud
   const osc = ctx.createOscillator();
   const oscGain = ctx.createGain();
   osc.type = "sine";
@@ -140,12 +133,146 @@ function playFootstep(ctx: AudioContext, leftFoot: boolean) {
   oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
   osc.connect(oscGain); oscGain.connect(ctx.destination);
   osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur);
-
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(0.38, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
   source.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
   source.start(ctx.currentTime);
+}
+
+// ── Hip-hop beat ─────────────────────────────────────────────────────────
+let beatSources: AudioBufferSourceNode[] = [];
+let beatOscillators: OscillatorNode[]   = [];
+let beatGainNode: GainNode | null       = null;
+
+function scheduleKick(ctx: AudioContext, master: GainNode, t: number) {
+  const osc = ctx.createOscillator();
+  const g   = ctx.createGain();
+  osc.connect(g); g.connect(master);
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(160, t);
+  osc.frequency.exponentialRampToValueAtTime(28, t + 0.38);
+  g.gain.setValueAtTime(0.9, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+  osc.start(t); osc.stop(t + 0.45);
+  beatOscillators.push(osc);
+}
+
+function scheduleSnare(ctx: AudioContext, master: GainNode, t: number) {
+  const sr  = ctx.sampleRate;
+  const dur = 0.22;
+  const buf = ctx.createBuffer(1, Math.floor(sr * dur), sr);
+  const d   = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.28));
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const f = ctx.createBiquadFilter();
+  f.type = "bandpass"; f.frequency.value = 2200; f.Q.value = 0.6;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.55, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+  beatSources.push(src);
+
+  const osc = ctx.createOscillator();
+  const g2  = ctx.createGain();
+  osc.connect(g2); g2.connect(master);
+  osc.frequency.value = 200;
+  g2.gain.setValueAtTime(0.25, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+  osc.start(t); osc.stop(t + 0.1);
+  beatOscillators.push(osc);
+}
+
+function scheduleHiHat(ctx: AudioContext, master: GainNode, t: number, vol: number) {
+  const sr  = ctx.sampleRate;
+  const dur = 0.045;
+  const buf = ctx.createBuffer(1, Math.floor(sr * dur), sr);
+  const d   = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.5));
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const f = ctx.createBiquadFilter();
+  f.type = "highpass"; f.frequency.value = 9000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+  beatSources.push(src);
+}
+
+function scheduleBass(ctx: AudioContext, master: GainNode, t: number, freq: number, dur: number) {
+  const osc = ctx.createOscillator();
+  const g   = ctx.createGain();
+  osc.connect(g); g.connect(master);
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0.5, t);
+  g.gain.setValueAtTime(0.5, t + dur - 0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  osc.start(t); osc.stop(t + dur + 0.01);
+  beatOscillators.push(osc);
+}
+
+export function startHipHopBeat() {
+  stopHipHopBeat();
+  try {
+    const ctx    = getCtx();
+    const master = ctx.createGain();
+    master.gain.value = 0.72;
+    master.connect(ctx.destination);
+    beatGainNode = master;
+
+    const bpm   = 92;
+    const step  = 60 / bpm / 4;   // 16th-note duration
+    const bars  = 5;               // schedule 5 bars (covers 8-sec dance with headroom)
+
+    // Bass line pattern (root notes, per bar): Gm feel
+    const bassLine = [98.0, 98.0, 87.3, 116.5];  // G2, G2, F2, Bb2
+
+    for (let bar = 0; bar < bars; bar++) {
+      const bOff = bar * 16 * step;
+
+      // Bass note — one per beat
+      for (let b = 0; b < 4; b++) {
+        scheduleBass(ctx, master, ctx.currentTime + bOff + b * 4 * step,
+          bassLine[b % bassLine.length], 4 * step - 0.04);
+      }
+
+      for (let s = 0; s < 16; s++) {
+        const t = ctx.currentTime + bOff + s * step;
+
+        // Kick: steps 0, 8   (beats 1 & 3)
+        if (s === 0 || s === 8)  scheduleKick(ctx, master, t);
+        // Extra soft kick pickup: step 10
+        if (s === 10) scheduleKick(ctx, master, t);
+
+        // Snare: steps 4, 12  (beats 2 & 4)
+        if (s === 4 || s === 12) scheduleSnare(ctx, master, t);
+
+        // Closed hi-hat every odd step (8th-note off-beats)
+        if (s % 2 === 1) scheduleHiHat(ctx, master, t, 0.18);
+
+        // Open hat accent on step 6 (and of beat 2) and step 14 (and of beat 4)
+        if (s === 6 || s === 14) scheduleHiHat(ctx, master, t, 0.28);
+      }
+    }
+  } catch (_) {}
+}
+
+export function stopHipHopBeat() {
+  beatSources.forEach((s) => { try { s.stop(); } catch (_) {} });
+  beatOscillators.forEach((o) => { try { o.stop(); } catch (_) {} });
+  if (beatGainNode) {
+    try { beatGainNode.gain.setValueAtTime(beatGainNode.gain.value, beatGainNode.context.currentTime);
+          beatGainNode.gain.exponentialRampToValueAtTime(0.001, beatGainNode.context.currentTime + 0.2);
+    } catch (_) {}
+  }
+  beatSources     = [];
+  beatOscillators = [];
+  beatGainNode    = null;
 }
 
 type SoundType = "coin" | "slide" | "jump" | "hit" | "trainhorn" | "footstep";
