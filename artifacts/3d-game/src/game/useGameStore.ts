@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type GameState = "menu" | "playing" | "gameover";
+export type GameState = "menu" | "playing" | "dancing" | "gameover";
 export type Lane = -1 | 0 | 1;
 
 interface GameStore {
@@ -8,6 +8,7 @@ interface GameStore {
   score: number;
   highScore: number;
   speed: number;
+  speedBeforeDance: number;
   lane: Lane;
   lives: number;
   coins: number;
@@ -20,6 +21,8 @@ interface GameStore {
   setLane: (l: Lane) => void;
   setSpeed: (s: number) => void;
   loseLife: () => void;
+  startDance: () => void;
+  endDance: () => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -27,6 +30,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   score: 0,
   highScore: 0,
   speed: 11,
+  speedBeforeDance: 11,
   lane: 0,
   lives: 3,
   coins: 0,
@@ -56,5 +60,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else {
       set((s) => ({ lives: s.lives - 1 }));
     }
+  },
+
+  startDance: () => {
+    const { speed } = get();
+    set({ gameState: "dancing", speedBeforeDance: speed });
+  },
+
+  endDance: () => {
+    const { speedBeforeDance } = get();
+    set({ gameState: "playing", speed: speedBeforeDance });
   },
 }));

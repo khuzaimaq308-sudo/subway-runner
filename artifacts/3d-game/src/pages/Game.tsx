@@ -8,52 +8,71 @@ import { Character } from "@/components/game/Character";
 import { Track } from "@/components/game/Track";
 import { Obstacles } from "@/components/game/Obstacles";
 import { Coins } from "@/components/game/Coins";
+import { BigWatch } from "@/components/game/BigWatch";
 import { Environment } from "@/components/game/Environment";
 import { Police } from "@/components/game/Police";
 import { HUD } from "@/components/ui/HUD";
 import { MenuScreen } from "@/components/ui/MenuScreen";
 import { GameOverScreen } from "@/components/ui/GameOverScreen";
 
-/**
- * Camera sits higher and closer than before, uses lookAt so you always
- * see the track well ahead of the character.
- * Rises slightly when the player jumps for a sense of height.
- */
-function CameraRig({ isJumping, speed }: { isJumping: boolean; speed: number }) {
+// ── Camera ────────────────────────────────────────────────────────────────
+function CameraRig({ isJumping, speed, isDancing }: { isJumping: boolean; speed: number; isDancing: boolean }) {
   const { camera } = useThree();
-  const camYRef = useRef(4.4);
+  const camYRef    = useRef(4.4);
+  const camZRef    = useRef(4.4);
+  const camXRef    = useRef(0);
+  const lookYRef   = useRef(0.5);
+  const lookZRef   = useRef(-10);
 
   useEffect(() => {
     camera.position.set(0, 4.4, 4.4);
     const pc = camera as THREE.PerspectiveCamera;
-    pc.fov  = 72;
-    pc.near = 0.1;
-    pc.far  = 1000;
+    pc.fov  = 72; pc.near = 0.1; pc.far = 1000;
     pc.updateProjectionMatrix();
     camera.lookAt(0, 0.5, -10);
   }, [camera]);
 
   useFrame((_, delta) => {
-    const targetY = isJumping ? 5.0 : 4.4;
-    camYRef.current += (targetY - camYRef.current) * Math.min(1, delta * 5);
-    camera.position.y = camYRef.current;
-    // lookAt a fixed world point so the view always shows what's ahead
-    camera.lookAt(0, 0.5, -10);
+    const smooth = Math.min(1, delta * 4);
 
-    // FOV widens slightly at high speed for a rush feeling
-    const pc = camera as THREE.PerspectiveCamera;
-    const targetFov = 72 + (speed - 8) * 0.5;
-    pc.fov += (Math.min(84, targetFov) - pc.fov) * Math.min(1, delta * 2);
-    pc.updateProjectionMatrix();
+    if (isDancing) {
+      // Swing in front of character, looking at them
+      camYRef.current  += (2.5 - camYRef.current)   * smooth;
+      camZRef.current  += (5.5 - camZRef.current)   * smooth;
+      camXRef.current  += (0   - camXRef.current)   * smooth;
+      lookYRef.current += (1.2 - lookYRef.current)  * smooth;
+      lookZRef.current += (0   - lookZRef.current)  * smooth;
+    } else {
+      // Normal behind-character view
+      const targetY = isJumping ? 5.0 : 4.4;
+      camYRef.current  += (targetY - camYRef.current) * Math.min(1, delta * 5);
+      camZRef.current  += (4.4 - camZRef.current)     * smooth;
+      camXRef.current  += (0   - camXRef.current)     * smooth;
+      lookYRef.current += (0.5 - lookYRef.current)    * smooth;
+      lookZRef.current += (-10 - lookZRef.current)    * smooth;
+    }
+
+    camera.position.set(camXRef.current, camYRef.current, camZRef.current);
+    camera.lookAt(0, lookYRef.current, lookZRef.current);
+
+    if (!isDancing) {
+      const pc = camera as THREE.PerspectiveCamera;
+      const targetFov = 72 + (speed - 8) * 0.5;
+      pc.fov += (Math.min(84, targetFov) - pc.fov) * Math.min(1, delta * 2);
+      pc.updateProjectionMatrix();
+    }
   });
 
   return null;
 }
 
+// ── Scene ─────────────────────────────────────────────────────────────────
 interface GameSceneProps {
   onHit: () => void;
   onCoin: () => void;
   onTrainHorn: () => void;
+  onBigWatch: () => void;
+  onDanceEnd: () => void;
   isJumping: boolean;
   isSliding: boolean;
   onJumpComplete: () => void;
@@ -61,20 +80,23 @@ interface GameSceneProps {
 }
 
 function GameScene({
-  onHit, onCoin, onTrainHorn, isJumping, isSliding, onJumpComplete, isHit,
+  onHit, onCoin, onTrainHorn, onBigWatch, onDanceEnd,
+  isJumping, isSliding, onJumpComplete, isHit,
 }: GameSceneProps) {
   const { gameState, speed, lane } = useGameStore();
-  const playing = gameState === "playing";
+  const playing  = gameState === "playing";
+  const dancing  = gameState === "dancing";
+  const active   = playing || dancing;   // track/obstacles still visible while dancing
 
   return (
     <>
       <color attach="background" args={["#87CEEB"]} />
       <ambientLight intensity={2.2} color="#FFFFFF" />
-      <directionalLight position={[5, 14, 8]} intensity={3.2} color="#FFF8E0" castShadow={false} />
-      <directionalLight position={[-4, 8, 6]} intensity={1.5} color="#FFFFFF" castShadow={false} />
+      <directionalLight position={[5, 14, 8]}  intensity={3.2} color="#FFF8E0" castShadow={false} />
+      <directionalLight position={[-4, 8, 6]}  intensity={1.5} color="#FFFFFF" castShadow={false} />
       <hemisphereLight args={["#87CEEB", "#4aaa30", 1.0]} />
 
-      <CameraRig isJumping={isJumping} speed={speed} />
+      <CameraRig isJumping={isJumping} speed={speed} isDancing={dancing} />
       <Environment speed={speed} playing={playing} />
       <Track speed={speed} playing={playing} />
 
@@ -83,10 +105,11 @@ function GameScene({
         isJumping={isJumping}
         isSliding={isSliding}
         isHit={isHit}
+        isDancing={dancing}
         onJumpComplete={onJumpComplete}
+        onDanceEnd={onDanceEnd}
       />
 
-      {/* Police appears briefly at game start then disappears */}
       <Police playerLane={lane} playing={playing} />
 
       <Obstacles
@@ -105,118 +128,116 @@ function GameScene({
         playerLane={lane + 1}
         onCollect={onCoin}
       />
+
+      {/* Big golden watch — spawns every 3 minutes */}
+      {active && (
+        <BigWatch
+          speed={speed}
+          playing={playing}
+          playerLane={lane + 1}
+          onCollect={onBigWatch}
+        />
+      )}
     </>
   );
 }
 
+// ── WebGL guard ───────────────────────────────────────────────────────────
 function WebGLCheck({ children }: { children: React.ReactNode }) {
-  const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
-
+  const [ok, setOk] = useState<boolean | null>(null);
   useEffect(() => {
-    const canvas = document.createElement("canvas");
-    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
-    setWebglAvailable(!!gl);
+    const cvs = document.createElement("canvas");
+    setOk(!!(cvs.getContext("webgl") || cvs.getContext("experimental-webgl")));
   }, []);
-
-  if (webglAvailable === null) return null;
-
-  if (!webglAvailable) {
-    return (
-      <div style={{
-        position: "fixed", inset: 0, display: "flex", alignItems: "center",
-        justifyContent: "center", background: "#87CEEB", color: "#333",
-        fontFamily: "system-ui", textAlign: "center", padding: "40px",
-      }}>
-        <div>
-          <div style={{ fontSize: "48px", marginBottom: "16px" }}>⚠️</div>
-          <h2 style={{ marginBottom: "8px" }}>WebGL Required</h2>
-          <p style={{ color: "#555" }}>Please open this in Chrome or Firefox with hardware acceleration enabled.</p>
-        </div>
-      </div>
-    );
-  }
-
+  if (ok === null) return null;
+  if (!ok) return (
+    <div style={{ position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#87CEEB",color:"#333",fontFamily:"system-ui",textAlign:"center",padding:"40px" }}>
+      <div><div style={{fontSize:"48px",marginBottom:"16px"}}>⚠️</div><h2>WebGL Required</h2><p style={{color:"#555"}}>Please open in Chrome or Firefox with hardware acceleration enabled.</p></div>
+    </div>
+  );
   return <>{children}</>;
 }
 
+// ── Score ticker ──────────────────────────────────────────────────────────
 function ScoreLoop() {
   const { gameState, addScore } = useGameStore();
   const playing = gameState === "playing";
-  const timerRef = useRef(0);
-
+  const t = useRef(0);
   useFrame((_, delta) => {
-    if (!playing) { timerRef.current = 0; return; }
-    timerRef.current += delta;
-    if (timerRef.current >= 0.1) { timerRef.current = 0; addScore(1); }
+    if (!playing) { t.current = 0; return; }
+    t.current += delta;
+    if (t.current >= 0.1) { t.current = 0; addScore(1); }
   });
-
   return null;
 }
 
-/** Fires footstep sounds rhythmically while the character is running on the ground */
-function FootstepLoop({
-  isJumping,
-  isSliding,
-  onStep,
-}: {
-  isJumping: boolean;
-  isSliding: boolean;
-  onStep: () => void;
-}) {
+// ── Footstep sound ────────────────────────────────────────────────────────
+function FootstepLoop({ isJumping, isSliding, onStep }: { isJumping: boolean; isSliding: boolean; onStep: () => void }) {
   const { gameState, speed } = useGameStore();
   const playing = gameState === "playing";
-  const stepTimerRef = useRef(0);
-  const onStepRef = useRef(onStep);
-  onStepRef.current = onStep;
-
+  const t = useRef(0);
+  const cb = useRef(onStep); cb.current = onStep;
   useFrame((_, delta) => {
-    if (!playing || isJumping || isSliding) {
-      stepTimerRef.current = 0;
-      return;
-    }
-    stepTimerRef.current += delta;
-    // Step interval: ~0.38s at normal speed, shrinks as player speeds up
+    if (!playing || isJumping || isSliding) { t.current = 0; return; }
+    t.current += delta;
     const interval = Math.max(0.17, 0.42 - speed * 0.012);
-    if (stepTimerRef.current >= interval) {
-      stepTimerRef.current = 0;
-      onStepRef.current();
-    }
+    if (t.current >= interval) { t.current = 0; cb.current(); }
   });
-
   return null;
 }
 
+// ── Dance HUD overlay ─────────────────────────────────────────────────────
+function DanceOverlay({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, display: "flex", alignItems: "center",
+      justifyContent: "center", pointerEvents: "none", zIndex: 30,
+    }}>
+      <div style={{
+        fontSize: "clamp(28px,5vw,52px)", fontWeight: 900,
+        color: "#FFD700", textShadow: "0 0 20px #FF8800, 0 3px 0 #000",
+        fontFamily: "system-ui",
+        animation: "dancePop 0.4s ease-out",
+        letterSpacing: "2px",
+      }}>
+        🎉 GOLDEN WATCH! 🎉
+      </div>
+    </div>
+  );
+}
+
+// ── Root component ────────────────────────────────────────────────────────
 export function Game() {
-  const { gameState, score, highScore, lives, coins, speed, lane, startGame, goToMenu, setSpeed } =
+  const { gameState, score, highScore, lives, coins, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance } =
     useGameStore();
   const { play: playSound } = useSound();
 
-  const [isJumping, setIsJumping] = useState(false);
-  const [isSliding, setIsSliding] = useState(false);
-  const [isHit, setIsHit] = useState(false);
+  const [isJumping, setIsJumping]   = useState(false);
+  const [isSliding, setIsSliding]   = useState(false);
+  const [isHit,     setIsHit]       = useState(false);
   const slideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const playing = gameState === "playing";
+  const dancing = gameState === "dancing";
 
   const handleInput = useCallback(
     (action: "left" | "right" | "jump" | "slide") => {
       if (!playing) return;
-      const currentLane = useGameStore.getState().lane;
+      const cur = useGameStore.getState().lane;
       if (action === "left") {
-        const next = Math.max(-1, currentLane - 1) as Lane;
-        if (next !== currentLane) { playSound("slide"); useGameStore.getState().setLane(next); }
+        const next = Math.max(-1, cur - 1) as Lane;
+        if (next !== cur) { playSound("slide"); useGameStore.getState().setLane(next); }
       }
       if (action === "right") {
-        const next = Math.min(1, currentLane + 1) as Lane;
-        if (next !== currentLane) { playSound("slide"); useGameStore.getState().setLane(next); }
+        const next = Math.min(1, cur + 1) as Lane;
+        if (next !== cur) { playSound("slide"); useGameStore.getState().setLane(next); }
       }
       if (action === "jump" && !isJumping && !isSliding) {
-        playSound("jump");
-        setIsJumping(true);
+        playSound("jump"); setIsJumping(true);
       }
       if (action === "slide" && !isJumping && !isSliding) {
-        playSound("slide");
-        setIsSliding(true);
+        playSound("slide"); setIsSliding(true);
         if (slideTimerRef.current) clearTimeout(slideTimerRef.current);
         slideTimerRef.current = setTimeout(() => setIsSliding(false), 900);
       }
@@ -238,28 +259,39 @@ export function Game() {
     useGameStore.getState().addCoin();
   }, [playSound]);
 
-  // Keep the train horn sound, just no visual popup
-  const handleTrainHorn = useCallback(() => {
-    playSound("trainhorn");
-  }, [playSound]);
+  const handleTrainHorn = useCallback(() => { playSound("trainhorn"); }, [playSound]);
+  const handleJumpComplete = useCallback(() => { setIsJumping(false); }, []);
 
-  const handleJumpComplete = useCallback(() => {
-    setIsJumping(false);
-  }, []);
+  const handleBigWatch = useCallback(() => {
+    playSound("coin");
+    useGameStore.getState().addScore(200);
+    startDance();
+  }, [playSound, startDance]);
 
+  const handleDanceEnd = useCallback(() => {
+    endDance();
+  }, [endDance]);
+
+  // Speed ramp (only while playing)
   useEffect(() => {
     if (!playing) return;
-    const interval = setInterval(() => {
+    const id = setInterval(() => {
       const s = useGameStore.getState().speed;
       setSpeed(Math.min(s + 0.15, 22));
     }, 3000);
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, [playing, setSpeed]);
-
-  const handleStart = useCallback(() => { startGame(); }, [startGame]);
 
   return (
     <WebGLCheck>
+      <style>{`
+        @keyframes dancePop {
+          0%  { transform: scale(0.5) rotate(-8deg); opacity: 0; }
+          60% { transform: scale(1.15) rotate(3deg); opacity: 1; }
+          100%{ transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+      `}</style>
+
       <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#87CEEB" }}>
         <Canvas
           shadows={false}
@@ -272,6 +304,8 @@ export function Game() {
             onHit={handleHit}
             onCoin={handleCoin}
             onTrainHorn={handleTrainHorn}
+            onBigWatch={handleBigWatch}
+            onDanceEnd={handleDanceEnd}
             isJumping={isJumping}
             isSliding={isSliding}
             onJumpComplete={handleJumpComplete}
@@ -279,19 +313,14 @@ export function Game() {
           />
         </Canvas>
 
-        <HUD score={score} lives={lives} coins={coins} visible={playing} />
+        <HUD score={score} lives={lives} coins={coins} visible={playing || dancing} />
+        <DanceOverlay visible={dancing} />
 
         {gameState === "menu" && (
-          <MenuScreen onStart={handleStart} highScore={highScore} />
+          <MenuScreen onStart={startGame} highScore={highScore} />
         )}
         {gameState === "gameover" && (
-          <GameOverScreen
-            score={score}
-            highScore={highScore}
-            coins={coins}
-            onRestart={handleStart}
-            onMenu={goToMenu}
-          />
+          <GameOverScreen score={score} highScore={highScore} coins={coins} onRestart={startGame} onMenu={goToMenu} />
         )}
       </div>
     </WebGLCheck>
