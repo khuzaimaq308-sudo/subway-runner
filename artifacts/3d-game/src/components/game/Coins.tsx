@@ -148,9 +148,14 @@ export function Coins({ speed, playing, playerLane, onCollect }: CoinsProps) {
       w.z += frameMove;
       w.mesh.position.z = w.z;
 
-      // Magnet: attract coin toward player X
+      // Magnet: only pull coins that are within proximity — they slide in one-by-one as they pass
       if (pwr === "magnet") {
-        w.attractX += (playerX - w.attractX) * Math.min(1, delta * 5);
+        const coinDz = Math.abs(w.z - PLAYER_Z);
+        if (coinDz < 12) {
+          // Pull strength grows as coin gets closer in Z
+          const strength = Math.max(0, 1 - coinDz / 12);
+          w.attractX += (playerX - w.attractX) * Math.min(1, delta * (4 + strength * 14));
+        }
         w.mesh.position.x = w.attractX;
       } else {
         // Snap back to lane if magnet ended

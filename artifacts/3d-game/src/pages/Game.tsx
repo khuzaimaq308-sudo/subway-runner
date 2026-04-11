@@ -164,7 +164,7 @@ function GameScene({
         />
       )}
 
-      {active && (
+      {active && !isJetpack && (
         <BigWatch
           speed={speed}
           playing={playing}

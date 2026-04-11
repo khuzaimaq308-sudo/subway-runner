@@ -63,8 +63,9 @@ export function Character({
   const isDyingRef    = useRef(isDying);
   const onCompleteRef = useRef(onJumpComplete);
   const onDanceEndRef = useRef(onDanceEnd);
-  const prevJumpRef   = useRef(false);
-  const prevSlideRef  = useRef(false);
+  const prevJumpRef     = useRef(false);
+  const prevSlideRef    = useRef(false);
+  const prevJetpackRef  = useRef(false);
 
   isJumpingRef.current  = isJumping;
   isSlidingRef.current  = isSliding;
@@ -312,11 +313,35 @@ export function Character({
     // Ground level depends on surface the player is on
     const groundLevel = isOnTrain ? 2.2 : 0;
 
-    // Jetpack: float up and hold at 3.0
+    // Jetpack: Superman pose — float high, tilt horizontal, slow spin
     if (isJetpack && !isOnTrain) {
-      root.position.y = THREE.MathUtils.lerp(root.position.y, 3.0, Math.min(1, delta * 3.5));
+      const cloned = clonedRef.current as THREE.Object3D | null;
+      // On first jetpack frame: freeze walk/jump/slide animations
+      if (!prevJetpackRef.current) {
+        run?.setEffectiveWeight(0);
+        jump?.setEffectiveWeight(0);
+        slide?.setEffectiveWeight(0);
+      }
+      prevJetpackRef.current = true;
+
+      // Float high (7 units up)
+      root.position.y = THREE.MathUtils.lerp(root.position.y, 7.0, Math.min(1, delta * 3.2));
       jumpProgressRef.current = 0;
       jumpDoneRef.current     = false;
+
+      // Tilt character horizontal (like Superman flying)
+      if (cloned) {
+        cloned.rotation.x = THREE.MathUtils.lerp(cloned.rotation.x, -Math.PI * 0.46, delta * 4);
+        // Slow Y spin
+        cloned.rotation.y += delta * 1.1;
+      }
+    }
+    // Falling edge — restore run animation (rotation.x smoothed below)
+    else if (prevJetpackRef.current && !isJetpack) {
+      prevJetpackRef.current = false;
+      const cloned = clonedRef.current as THREE.Object3D | null;
+      if (cloned) cloned.rotation.y = Math.PI;
+      run?.setEffectiveWeight(1);
     }
     // Jump arc (from current ground level)
     else if (jumping) {
@@ -330,6 +355,14 @@ export function Character({
       jumpProgressRef.current = 0;
       jumpDoneRef.current     = false;
       root.position.y = THREE.MathUtils.lerp(root.position.y, groundLevel, Math.min(1, delta * 12));
+    }
+
+    // Smoothly restore Superman tilt after jetpack ends
+    if (!isJetpack) {
+      const cloned = clonedRef.current as THREE.Object3D | null;
+      if (cloned && Math.abs(cloned.rotation.x) > 0.01) {
+        cloned.rotation.x = THREE.MathUtils.lerp(cloned.rotation.x, 0, Math.min(1, delta * 6));
+      }
     }
 
     // Lane switching
