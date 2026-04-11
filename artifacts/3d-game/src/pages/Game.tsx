@@ -68,11 +68,11 @@ function GameScene({
 
   return (
     <>
-      <color attach="background" args={["#87CEEB"]} />
-      <ambientLight intensity={2.5} color="#FFFFFF" />
-      <directionalLight position={[5, 14, 8]} intensity={3.5} color="#FFF8E0" castShadow={false} />
-      <directionalLight position={[-4, 8, 6]} intensity={1.8} color="#FFFFFF" castShadow={false} />
-      <hemisphereLight args={["#87CEEB", "#90EE90", 1.2]} />
+      <color attach="background" args={["#111118"]} />
+      <ambientLight intensity={1.8} color="#dde0ff" />
+      <directionalLight position={[0, 10, 4]} intensity={3.0} color="#FFFFFF" castShadow={false} />
+      <pointLight position={[-4, 3, -4]} intensity={2.5} color="#FF5533" distance={20} />
+      <pointLight position={[ 4, 3, -8]} intensity={2.5} color="#33AAFF" distance={20} />
 
       <CameraRig isJumping={isJumping} speed={speed} />
       <Environment speed={speed} playing={playing} />
