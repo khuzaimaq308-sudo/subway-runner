@@ -288,7 +288,7 @@ export function Game() {
     endDance();
   }, [endDance]);
 
-  const handleMountTrain = useCallback((_lane: number) => {
+  const handleMountTrain = useCallback((_trainLane: number) => {
     setOnTrain(true);
     playSound("jump");
   }, [setOnTrain, playSound]);

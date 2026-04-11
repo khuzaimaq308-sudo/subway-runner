@@ -77,6 +77,7 @@ export function Coins({ speed, playing, playerLane, onCollect }: CoinsProps) {
   const groupRef       = useRef<THREE.Group>(new THREE.Group());
   const watchesRef     = useRef<WatchData[]>([]);
   const spawnTimerRef  = useRef(0);
+  const waveTimerRef   = useRef(3.5); // first all-lanes wave after 3.5s
   const timeRef        = useRef(0);
   const onCollectRef   = useRef(onCollect);
   onCollectRef.current = onCollect;
@@ -96,6 +97,7 @@ export function Coins({ speed, playing, playerLane, onCollect }: CoinsProps) {
     watchesRef.current.forEach(w => group.remove(w.mesh));
     watchesRef.current = [];
     spawnTimerRef.current = 0;
+    waveTimerRef.current  = 3.5;
     timeRef.current = 0;
   }, [playing]);
 
@@ -107,17 +109,35 @@ export function Coins({ speed, playing, playerLane, onCollect }: CoinsProps) {
     const pwr = powerupRef.current;
     const playerX = LANE_X[playerLane];
 
-    const spawnInterval = Math.max(2.5, 4.5 - speed * 0.02);
+    // ── Single-lane burst (frequent) ──────────────────────────────────
+    const spawnInterval = Math.max(1.2, 2.8 - speed * 0.03);
     if (spawnTimerRef.current >= spawnInterval) {
       spawnTimerRef.current = 0;
       const lane  = Math.floor(Math.random() * 3);
-      const count = Math.random() < 0.4 ? 2 : 1;
+      const count = Math.random() < 0.5 ? 3 : 2; // 2-3 watches per burst
       for (let i = 0; i < count; i++) {
         const w = makeWatch(lane, Math.random() * Math.PI * 2);
-        w.z = SPAWN_Z - i * 3.5;
+        w.z = SPAWN_Z - i * 4.0;
         w.mesh.position.z = w.z;
         groupRef.current.add(w.mesh);
         watchesRef.current.push(w);
+      }
+    }
+
+    // ── All-lanes wave (all 3 lanes at once, staggered) ───────────────
+    waveTimerRef.current += delta;
+    const waveInterval = Math.max(4.0, 7.0 - speed * 0.08);
+    if (waveTimerRef.current >= waveInterval) {
+      waveTimerRef.current = 0;
+      for (let lane = 0; lane < 3; lane++) {
+        const count = Math.random() < 0.4 ? 2 : 1;
+        for (let i = 0; i < count; i++) {
+          const w = makeWatch(lane, Math.random() * Math.PI * 2);
+          w.z = SPAWN_Z - i * 5.0 - lane * 1.5; // stagger per lane
+          w.mesh.position.z = w.z;
+          groupRef.current.add(w.mesh);
+          watchesRef.current.push(w);
+        }
       }
     }
 

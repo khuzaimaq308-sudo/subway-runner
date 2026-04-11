@@ -628,15 +628,18 @@ export function Obstacles({
   const obsRef           = useRef<ObstacleData[]>([]);
   const spawnTimerRef    = useRef(0);
   const incomingTimerRef = useRef(0);
-  const hitCooldownRef   = useRef(0);
-  // Tracks the player's VISUAL x position with the same lerp Character uses.
-  // This prevents phantom hits that fire the instant a lane-swap is registered
-  // in the store but before the character has physically moved there.
-  const playerVisualXRef = useRef(LANE_X[playerLane]);
+  const hitCooldownRef    = useRef(0);
+  const playerVisualXRef  = useRef(LANE_X[playerLane]);
+  const mountedTrainRef   = useRef<ObstacleData | null>(null);
+  const prevPlayerLaneRef = useRef(playerLane);
   const onHitRef  = useRef(onHit);
   const onHornRef = useRef(onTrainHorn);
-  onHitRef.current  = onHit;
-  onHornRef.current = onTrainHorn;
+  const onMountRef    = useRef(onMountTrain);
+  const onDismountRef = useRef(onDismountTrain);
+  onHitRef.current      = onHit;
+  onHornRef.current     = onTrainHorn;
+  onMountRef.current    = onMountTrain;
+  onDismountRef.current = onDismountTrain;
 
   useEffect(() => {
     const g = groupRef.current;
@@ -652,10 +655,12 @@ export function Obstacles({
     const g = groupRef.current;
     obsRef.current.forEach((o) => g.remove(o.mesh));
     obsRef.current = [];
-    spawnTimerRef.current    = -1.0; // extra 1s delay before first obstacle
+    spawnTimerRef.current    = -1.0;
     incomingTimerRef.current = 0;
-    hitCooldownRef.current   = 2.5; // 2.5s startup grace — no hits at game start
-    playerVisualXRef.current = LANE_X[1]; // reset to center lane
+    hitCooldownRef.current   = 2.5;
+    playerVisualXRef.current = LANE_X[1];
+    mountedTrainRef.current  = null;
+    prevPlayerLaneRef.current = 1;
   }, [playing]);
 
   useFrame((_, delta) => {
@@ -666,6 +671,10 @@ export function Obstacles({
     // is already 60% of the way across the lane — clearing the tight hit radius quickly.
     const targetX = LANE_X[playerLane];
     playerVisualXRef.current += (targetX - playerVisualXRef.current) * Math.min(1, delta * 22);
+
+    // Detect lane changes for inter-train jumping
+    const laneChanged = playerLane !== prevPlayerLaneRef.current;
+    prevPlayerLaneRef.current = playerLane;
 
     spawnTimerRef.current    += delta;
     incomingTimerRef.current += delta;
@@ -714,43 +723,59 @@ export function Obstacles({
       obs.z += actualMove;
       obs.mesh.position.z = obs.z;
 
-      // Track which ramp train the player is currently riding
-      if (obs.type === "ramp_train" && playerOnTrain) {
-        // When the train's back face passes the player, dismount
-        const backFaceZ = obs.z - obs.halfZ;
-        if (backFaceZ > PLAYER_Z + 0.5) {
-          onDismountTrain();
+      // ── Mounted train: inter-train jump + dismount ────────────────────
+      if (obs === mountedTrainRef.current) {
+        if (laneChanged) {
+          // Player jumped to a new lane while on train
+          const neighbour = obsRef.current.find(
+            (o) => o !== obs && o.type === "ramp_train" && o.lane === playerLane && o.z > -14 && o.z < 6,
+          );
+          if (neighbour) {
+            mountedTrainRef.current = neighbour;
+            onMountRef.current(neighbour.lane);
+          } else {
+            mountedTrainRef.current = null;
+            onDismountRef.current();
+          }
         }
+        // Dismount when back of train cars passes player
+        const trainBackZ = obs.z - obs.halfZ + 1.8;
+        if (trainBackZ > PLAYER_Z + 0.4) {
+          mountedTrainRef.current = null;
+          onDismountRef.current();
+        }
+        if (obs.z > DESPAWN_Z) toRemove.push(obs);
+        continue;
       }
 
       if (hitCooldownRef.current <= 0) {
         const dx = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
         const hr = obs.type === "incoming_train" ? 1.5 : obs.type === "train" || obs.type === "ramp_train" ? 1.3 : 1.1;
 
-        const aheadWindow  = obs.halfZ + 0.45;
-        const pastWindow   = 0.6;
-        const signedDz     = obs.z - PLAYER_Z;
-        const effectiveAhead = Math.max(aheadWindow, actualMove * 4);
+        // Tight collision: halfZ + 12cm buffer + ONE frame look-ahead.
+        // Previously used actualMove*4 (4-frame look-ahead) which caused the
+        // player to die visually far from the obstacle.
+        const aheadWindow    = obs.halfZ + 0.12;
+        const effectiveAhead = aheadWindow + actualMove;
+        const pastWindow     = 0.4;
+        const signedDz       = obs.z - PLAYER_Z;
 
         if (dx < hr && signedDz > -effectiveAhead && signedDz < pastWindow) {
-          // Ramp train: player can mount by jumping when the ramp front face arrives
+          // ── Ramp train: auto-mount when front face arrives ────────────
           if (obs.type === "ramp_train" && !playerOnTrain) {
             const frontFaceZ = obs.z + obs.halfZ;
-            if (frontFaceZ > -2.5 && frontFaceZ < 2.5 && playerJumping) {
-              // Mount the train
-              hitCooldownRef.current = 2.5;
-              onMountTrain(obs.lane);
-            } else if (!playerJumping) {
-              // Ran into the front without jumping → hit
-              hitCooldownRef.current = 2.2;
-              onHitRef.current();
+            if (frontFaceZ > -1.5 && frontFaceZ < 3.0) {
+              hitCooldownRef.current  = 2.8;
+              mountedTrainRef.current = obs;
+              onMountRef.current(obs.lane);
             }
-            continue;
+            continue; // still approaching or just mounted — no hit
           }
 
-          // Player riding on top of a train: skip all ground-level obstacles
+          // Skip ground obstacles when riding on top of any train
           if (playerOnTrain) continue;
 
+          // Normal collision
           let blocked = true;
           if (obs.jumpable && playerJumping)                                            blocked = false;
           if ((obs.type === "train" || obs.type === "incoming_train") && playerJumping) blocked = false;
