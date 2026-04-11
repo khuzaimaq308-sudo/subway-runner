@@ -21,12 +21,15 @@ interface CharacterProps {
   isSliding: boolean;
   isDancing: boolean;
   isDying: boolean;
+  isJetpack: boolean;
+  isOnTrain: boolean;
   onJumpComplete: () => void;
   onDanceEnd: () => void;
 }
 
 export function Character({
-  lane, isJumping, isHit, isSliding, isDancing, isDying, onJumpComplete, onDanceEnd,
+  lane, isJumping, isHit, isSliding, isDancing, isDying,
+  isJetpack, isOnTrain, onJumpComplete, onDanceEnd,
 }: CharacterProps) {
   const { scene } = useThree();
   const { scene: gltfScene, animations } = useGLTF(`${import.meta.env.BASE_URL}models/character.glb`);
@@ -306,10 +309,19 @@ export function Character({
     const rb = rootBoneRef.current;
     if (rb) { rb.position.x = 0; rb.position.z = 0; if (jumping) rb.position.y = rootBoneInitY.current; }
 
-    // Jump arc
-    if (jumping) {
+    // Ground level depends on surface the player is on
+    const groundLevel = isOnTrain ? 2.2 : 0;
+
+    // Jetpack: float up and hold at 3.0
+    if (isJetpack && !isOnTrain) {
+      root.position.y = THREE.MathUtils.lerp(root.position.y, 3.0, Math.min(1, delta * 3.5));
+      jumpProgressRef.current = 0;
+      jumpDoneRef.current     = false;
+    }
+    // Jump arc (from current ground level)
+    else if (jumping) {
       jumpProgressRef.current = Math.min(1, jumpProgressRef.current + delta / JUMP_DURATION);
-      root.position.y = Math.sin(jumpProgressRef.current * Math.PI) * JUMP_HEIGHT;
+      root.position.y = groundLevel + Math.sin(jumpProgressRef.current * Math.PI) * JUMP_HEIGHT;
       if (jumpProgressRef.current >= 0.92 && !jumpDoneRef.current) {
         jumpDoneRef.current = true;
         onCompleteRef.current();
@@ -317,7 +329,7 @@ export function Character({
     } else {
       jumpProgressRef.current = 0;
       jumpDoneRef.current     = false;
-      root.position.y = THREE.MathUtils.lerp(root.position.y, 0, Math.min(1, delta * 12));
+      root.position.y = THREE.MathUtils.lerp(root.position.y, groundLevel, Math.min(1, delta * 12));
     }
 
     // Lane switching

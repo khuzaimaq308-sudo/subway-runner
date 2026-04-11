@@ -2,7 +2,7 @@ import { useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
-type ObstacleType = "barrier" | "train" | "box" | "incoming_train" | "low_gate";
+type ObstacleType = "barrier" | "train" | "box" | "incoming_train" | "low_gate" | "ramp_train";
 
 interface ObstacleData {
   mesh: THREE.Group;
@@ -21,8 +21,11 @@ interface ObstaclesProps {
   playerLane: number;
   playerJumping: boolean;
   playerSliding: boolean;
+  playerOnTrain: boolean;
   onHit: () => void;
   onTrainHorn: () => void;
+  onMountTrain: (lane: number) => void;
+  onDismountTrain: () => void;
 }
 
 const LANE_X  = [-2.5, 0, 2.5];
@@ -464,6 +467,71 @@ function makeTrainCar(lane: number): ObstacleData {
   return { mesh: group, lane, z: SPAWN_Z, type: "train", jumpable: false, slideOnly: false, extraSpeed: 0, halfZ: 2.25 };
 }
 
+// ── Climbable ramp train (multi-car + visible slide ramp at front) ────────
+const matRampBody  = new THREE.MeshLambertMaterial({ color: 0xFF6600, emissive: 0xCC3300, emissiveIntensity: 0.3 });
+const matRampRoof  = new THREE.MeshLambertMaterial({ color: 0xDD4400 });
+const matRampSlide = new THREE.MeshLambertMaterial({ color: 0xFFCC00, emissive: 0xFFAA00, emissiveIntensity: 0.5 });
+const matRampArrow = new THREE.MeshLambertMaterial({ color: 0xFFFFFF, emissive: 0xFFFFFF, emissiveIntensity: 0.8 });
+
+function makeRampTrain(lane: number): ObstacleData {
+  const group = new THREE.Group();
+  group.position.set(LANE_X[lane], 0, SPAWN_Z);
+
+  // 3 train car bodies (total ~13.5 units long)
+  const carPositions = [-4.5, 0, 4.5];
+  for (const cz of carPositions) {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 2.2, 4.0), matRampBody);
+    body.position.set(0, 1.1, cz);
+    group.add(body);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.18, 3.8), matRampRoof);
+    roof.position.set(0, 2.29, cz);
+    group.add(roof);
+    // Outline
+    const outline = new THREE.Mesh(new THREE.BoxGeometry(2.18, 2.28, 4.08), new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }));
+    outline.position.set(0, 1.1, cz);
+    group.add(outline);
+  }
+
+  // Connecting platforms between cars
+  for (const cz of [-2.25, 2.25]) {
+    const conn = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.15, 0.8), matRampRoof);
+    conn.position.set(0, 2.29, cz);
+    group.add(conn);
+  }
+
+  // Ramp at the FRONT (+Z end, approaches player)
+  // The front of car 3 is at z=4.5+2.0=6.5. Ramp extends from z=6.5 to z=8.0
+  const rampGeo = new THREE.BoxGeometry(2.0, 0.12, 1.8);
+  const ramp    = new THREE.Mesh(rampGeo, matRampSlide);
+  ramp.position.set(0, 1.22, 7.3);
+  ramp.rotation.x = -0.45;   // slope angle
+  group.add(ramp);
+
+  // Arrow chevrons on ramp to signal "climbable"
+  for (let i = 0; i < 3; i++) {
+    const chevron = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 0.2), matRampArrow);
+    chevron.position.set(0, 1.3 + i * 0.28, 7.6 - i * 0.35);
+    chevron.rotation.x = -0.45;
+    group.add(chevron);
+  }
+
+  // Front bumper/grill
+  const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.6, 0.25), matRampSlide);
+  bumper.position.set(0, 0.6, 8.2);
+  group.add(bumper);
+
+  return {
+    mesh: group,
+    lane,
+    z: SPAWN_Z,
+    type: "ramp_train",
+    jumpable: false,
+    slideOnly: false,
+    extraSpeed: 0,
+    halfZ: 8.3,   // front face at ~8.3 units ahead of center
+  };
+}
+
 // ── Cartoon incoming locomotive ───────────────────────────────────────────
 function makeIncomingTrain(lane: number): ObstacleData {
   const group = new THREE.Group();
@@ -552,7 +620,8 @@ function makeBox(lane: number): ObstacleData {
 
 // ── Main component ────────────────────────────────────────────────────────
 export function Obstacles({
-  speed, playing, playerLane, playerJumping, playerSliding, onHit, onTrainHorn,
+  speed, playing, playerLane, playerJumping, playerSliding, playerOnTrain,
+  onHit, onTrainHorn, onMountTrain, onDismountTrain,
 }: ObstaclesProps) {
   const { scene } = useThree();
   const groupRef         = useRef<THREE.Group>(new THREE.Group());
@@ -602,11 +671,11 @@ export function Obstacles({
     incomingTimerRef.current += delta;
     if (hitCooldownRef.current > 0) hitCooldownRef.current -= delta;
 
-    // Regular obstacles – spawn in any lane, no artificial safe lane.
-    const interval = Math.max(1.4, 3.2 - speed * 0.07);
+    // Regular obstacles – denser train spawning
+    const interval = Math.max(0.9, 2.8 - speed * 0.07);
     if (spawnTimerRef.current >= interval) {
       spawnTimerRef.current = 0;
-      const numObs  = Math.random() < 0.28 ? 2 : 1;
+      const numObs  = Math.random() < 0.45 ? 2 : 1;
       const used    = new Set<number>();
       for (let i = 0; i < numObs; i++) {
         let lane  = Math.floor(Math.random() * 3);
@@ -617,17 +686,18 @@ export function Obstacles({
         used.add(lane);
         const r = Math.random();
         let obs: ObstacleData;
-        if      (r < 0.25) obs = makeBarrier(lane);
-        else if (r < 0.48) obs = makeTrainCar(lane);
-        else if (r < 0.72) obs = makeBox(lane);
-        else               obs = makeLowGate(lane);   // 28% → was 40%
+        if      (r < 0.20) obs = makeBarrier(lane);
+        else if (r < 0.52) obs = makeTrainCar(lane);    // 32% trains
+        else if (r < 0.66) obs = makeBox(lane);
+        else if (r < 0.82) obs = makeLowGate(lane);
+        else               obs = makeRampTrain(lane);   // 18% ramp trains
         groupRef.current.add(obs.mesh);
         obsRef.current.push(obs);
       }
     }
 
-    // Incoming train
-    const incomingInterval = Math.max(12, 20 - speed * 0.3);
+    // Incoming train (more frequent at high speed)
+    const incomingInterval = Math.max(10, 18 - speed * 0.3);
     if (incomingTimerRef.current >= incomingInterval) {
       incomingTimerRef.current = 0;
       const obs = makeIncomingTrain(Math.floor(Math.random() * 3));
@@ -644,36 +714,53 @@ export function Obstacles({
       obs.z += actualMove;
       obs.mesh.position.z = obs.z;
 
-      if (hitCooldownRef.current <= 0) {
-        // Use the smoothed visual position so lane-swap inputs don't cause
-        // phantom hits before the character has physically arrived in the new lane.
-        const dx = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
-        // Tight hit radii — lanes are 2.5 units apart.
-        // With visual-X tracking at delta*22, after 3 frames (~0.05s) the player
-        // is already ~55% across a lane change, clearing hr=1.1 cleanly.
-        const hr = obs.type === "incoming_train" ? 1.5 : obs.type === "train" ? 1.3 : 1.1;
+      // Track which ramp train the player is currently riding
+      if (obs.type === "ramp_train" && playerOnTrain) {
+        // When the train's back face passes the player, dismount
+        const backFaceZ = obs.z - obs.halfZ;
+        if (backFaceZ > PLAYER_Z + 0.5) {
+          onDismountTrain();
+        }
+      }
 
-        // Accurate front-face collision:
-        // The obstacle's front face (+Z tip) is at obs.z + obs.halfZ.
-        // Hit triggers when the front face is within 0.45 units of the player (body buffer),
-        // and clears when the CENTER has moved 0.6 units past the player.
-        const frontFaceZ  = obs.z + obs.halfZ;               // world Z of the approaching face
-        const aheadWindow = obs.halfZ + 0.45;                // == front-face buffer from center
-        const pastWindow  = 0.6;
-        const signedDz    = obs.z - PLAYER_Z;
-        // Safety: also widen window by actualMove so fast obstacles never skip the window.
+      if (hitCooldownRef.current <= 0) {
+        const dx = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
+        const hr = obs.type === "incoming_train" ? 1.5 : obs.type === "train" || obs.type === "ramp_train" ? 1.3 : 1.1;
+
+        const aheadWindow  = obs.halfZ + 0.45;
+        const pastWindow   = 0.6;
+        const signedDz     = obs.z - PLAYER_Z;
         const effectiveAhead = Math.max(aheadWindow, actualMove * 4);
 
-        let blocked = true;
-        if (obs.jumpable && playerJumping)                                          blocked = false;
-        if ((obs.type === "train" || obs.type === "incoming_train") && playerJumping) blocked = false;
-        if (playerSliding && !obs.jumpable)                                         blocked = false;
-        if (obs.slideOnly && playerJumping)                                         blocked = true;
+        if (dx < hr && signedDz > -effectiveAhead && signedDz < pastWindow) {
+          // Ramp train: player can mount by jumping when the ramp front face arrives
+          if (obs.type === "ramp_train" && !playerOnTrain) {
+            const frontFaceZ = obs.z + obs.halfZ;
+            if (frontFaceZ > -2.5 && frontFaceZ < 2.5 && playerJumping) {
+              // Mount the train
+              hitCooldownRef.current = 2.5;
+              onMountTrain(obs.lane);
+            } else if (!playerJumping) {
+              // Ran into the front without jumping → hit
+              hitCooldownRef.current = 2.2;
+              onHitRef.current();
+            }
+            continue;
+          }
 
-        void frontFaceZ; // used for reasoning; actual test is via signedDz + effectiveAhead
-        if (dx < hr && signedDz > -effectiveAhead && signedDz < pastWindow && blocked) {
-          hitCooldownRef.current = 2.2;
-          onHitRef.current();
+          // Player riding on top of a train: skip all ground-level obstacles
+          if (playerOnTrain) continue;
+
+          let blocked = true;
+          if (obs.jumpable && playerJumping)                                            blocked = false;
+          if ((obs.type === "train" || obs.type === "incoming_train") && playerJumping) blocked = false;
+          if (playerSliding && !obs.jumpable)                                           blocked = false;
+          if (obs.slideOnly && playerJumping)                                           blocked = true;
+
+          if (blocked) {
+            hitCooldownRef.current = 2.2;
+            onHitRef.current();
+          }
         }
       }
 

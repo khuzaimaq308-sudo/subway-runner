@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 export type GameState = "menu" | "playing" | "dancing" | "dying" | "gameover";
 export type Lane = -1 | 0 | 1;
+export type Powerup = "magnet" | "jetpack" | null;
 
 interface GameStore {
   gameState: GameState;
@@ -12,6 +13,9 @@ interface GameStore {
   lane: Lane;
   lives: number;
   coins: number;
+  powerup: Powerup;
+  powerupTime: number;
+  onTrain: boolean;
 
   startGame: () => void;
   startDying: () => void;
@@ -24,6 +28,9 @@ interface GameStore {
   loseLife: () => void;
   startDance: () => void;
   endDance: () => void;
+  activatePowerup: (type: NonNullable<Powerup>, duration: number) => void;
+  tickPowerup: (delta: number) => void;
+  setOnTrain: (v: boolean) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -35,13 +42,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lane: 0,
   lives: 1,
   coins: 0,
+  powerup: null,
+  powerupTime: 0,
+  onTrain: false,
 
   startGame: () =>
-    set({ gameState: "playing", score: 0, speed: 11, lane: 0, lives: 1, coins: 0 }),
+    set({ gameState: "playing", score: 0, speed: 11, lane: 0, lives: 1, coins: 0, powerup: null, powerupTime: 0, onTrain: false }),
 
   startDying: () => {
     const { score, highScore } = get();
-    set({ gameState: "dying", highScore: Math.max(score, highScore) });
+    set({ gameState: "dying", highScore: Math.max(score, highScore), powerup: null, powerupTime: 0, onTrain: false });
   },
 
   endGame: () => set({ gameState: "gameover" }),
@@ -74,4 +84,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { speedBeforeDance } = get();
     set({ gameState: "playing", speed: speedBeforeDance });
   },
+
+  activatePowerup: (type, duration) => set({ powerup: type, powerupTime: duration }),
+
+  tickPowerup: (delta) => {
+    const { powerupTime } = get();
+    const next = powerupTime - delta;
+    if (next <= 0) {
+      set({ powerup: null, powerupTime: 0 });
+    } else {
+      set({ powerupTime: next });
+    }
+  },
+
+  setOnTrain: (v) => set({ onTrain: v }),
 }));

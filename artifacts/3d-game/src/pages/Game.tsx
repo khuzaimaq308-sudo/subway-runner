@@ -11,12 +11,13 @@ import { Coins } from "@/components/game/Coins";
 import { BigWatch } from "@/components/game/BigWatch";
 import { Environment } from "@/components/game/Environment";
 import { Police } from "@/components/game/Police";
+import { Powerups } from "@/components/game/Powerups";
 import { HUD } from "@/components/ui/HUD";
 import { MenuScreen } from "@/components/ui/MenuScreen";
 import { GameOverScreen } from "@/components/ui/GameOverScreen";
 
 // ── Camera ────────────────────────────────────────────────────────────────
-function CameraRig({ isJumping, speed, isDancing }: { isJumping: boolean; speed: number; isDancing: boolean }) {
+function CameraRig({ isJumping, speed, isDancing, isOnTrain }: { isJumping: boolean; speed: number; isDancing: boolean; isOnTrain: boolean }) {
   const { camera } = useThree();
   const camYRef    = useRef(4.4);
   const camZRef    = useRef(4.4);
@@ -36,23 +37,20 @@ function CameraRig({ isJumping, speed, isDancing }: { isJumping: boolean; speed:
     const smooth = Math.min(1, delta * 4);
 
     if (isDancing) {
-      // Zoom close in front of the dancing character
       camYRef.current  += (1.6 - camYRef.current)   * smooth;
       camZRef.current  += (2.8 - camZRef.current)   * smooth;
       camXRef.current  += (0   - camXRef.current)   * smooth;
       lookYRef.current += (1.1 - lookYRef.current)  * smooth;
       lookZRef.current += (0   - lookZRef.current)  * smooth;
-      // Also narrow FOV for a tighter portrait feel
       const pc = camera as THREE.PerspectiveCamera;
       pc.fov += (58 - pc.fov) * Math.min(1, delta * 3);
       pc.updateProjectionMatrix();
     } else {
-      // Normal behind-character view
-      const targetY = isJumping ? 5.0 : 4.4;
+      const targetY = isOnTrain ? 6.0 : (isJumping ? 5.0 : 4.4);
       camYRef.current  += (targetY - camYRef.current) * Math.min(1, delta * 5);
       camZRef.current  += (4.4 - camZRef.current)     * smooth;
       camXRef.current  += (0   - camXRef.current)     * smooth;
-      lookYRef.current += (0.5 - lookYRef.current)    * smooth;
+      lookYRef.current += ((isOnTrain ? 2.0 : 0.5) - lookYRef.current) * smooth;
       lookZRef.current += (-10 - lookZRef.current)    * smooth;
     }
 
@@ -70,6 +68,16 @@ function CameraRig({ isJumping, speed, isDancing }: { isJumping: boolean; speed:
   return null;
 }
 
+// ── Powerup ticker (runs inside Canvas so useFrame is available) ──────────
+function PowerupTicker() {
+  const { gameState, tickPowerup } = useGameStore();
+  const playing = gameState === "playing";
+  useFrame((_, delta) => {
+    if (playing) tickPowerup(delta);
+  });
+  return null;
+}
+
 // ── Scene ─────────────────────────────────────────────────────────────────
 interface GameSceneProps {
   onHit: () => void;
@@ -77,6 +85,8 @@ interface GameSceneProps {
   onTrainHorn: () => void;
   onBigWatch: () => void;
   onDanceEnd: () => void;
+  onMountTrain: (lane: number) => void;
+  onDismountTrain: () => void;
   isJumping: boolean;
   isSliding: boolean;
   onJumpComplete: () => void;
@@ -85,13 +95,16 @@ interface GameSceneProps {
 
 function GameScene({
   onHit, onCoin, onTrainHorn, onBigWatch, onDanceEnd,
+  onMountTrain, onDismountTrain,
   isJumping, isSliding, onJumpComplete, isHit,
 }: GameSceneProps) {
-  const { gameState, speed, lane } = useGameStore();
+  const { gameState, speed, lane, powerup, onTrain } = useGameStore();
   const playing  = gameState === "playing";
   const dancing  = gameState === "dancing";
   const dying    = gameState === "dying";
-  const active   = playing || dancing || dying;   // track/obstacles still visible
+  const active   = playing || dancing || dying;
+
+  const isJetpack = powerup === "jetpack";
 
   return (
     <>
@@ -101,7 +114,8 @@ function GameScene({
       <directionalLight position={[-4, 8, 6]}  intensity={1.5} color="#FFFFFF" castShadow={false} />
       <hemisphereLight args={["#87CEEB", "#4aaa30", 1.0]} />
 
-      <CameraRig isJumping={isJumping} speed={speed} isDancing={dancing} />
+      <PowerupTicker />
+      <CameraRig isJumping={isJumping} speed={speed} isDancing={dancing} isOnTrain={onTrain} />
       <Environment speed={speed} playing={playing} />
       <Track speed={speed} playing={playing} />
 
@@ -112,6 +126,8 @@ function GameScene({
         isHit={isHit}
         isDancing={dancing}
         isDying={dying}
+        isJetpack={isJetpack}
+        isOnTrain={onTrain}
         onJumpComplete={onJumpComplete}
         onDanceEnd={onDanceEnd}
       />
@@ -124,8 +140,11 @@ function GameScene({
         playerLane={lane + 1}
         playerJumping={isJumping}
         playerSliding={isSliding}
+        playerOnTrain={onTrain}
         onHit={onHit}
         onTrainHorn={onTrainHorn}
+        onMountTrain={onMountTrain}
+        onDismountTrain={onDismountTrain}
       />
 
       <Coins
@@ -135,7 +154,14 @@ function GameScene({
         onCollect={onCoin}
       />
 
-      {/* Big golden watch — spawns every 3 minutes */}
+      {playing && (
+        <Powerups
+          speed={speed}
+          playing={playing}
+          playerLane={lane + 1}
+        />
+      )}
+
       {active && (
         <BigWatch
           speed={speed}
@@ -194,7 +220,7 @@ function FootstepLoop({ isJumping, isSliding, onStep }: { isJumping: boolean; is
 
 // ── Root component ────────────────────────────────────────────────────────
 export function Game() {
-  const { gameState, score, highScore, coins, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance, endGame } =
+  const { gameState, score, highScore, coins, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance, endGame, setOnTrain } =
     useGameStore();
   const { play: playSound } = useSound();
 
@@ -235,7 +261,6 @@ export function Game() {
   useInput(handleInput, playing);
 
   const handleHit = useCallback(() => {
-    // Guard: only process hits while actively playing
     if (useGameStore.getState().gameState !== "playing") return;
     playSound("hit");
     setIsHit(true);
@@ -263,7 +288,16 @@ export function Game() {
     endDance();
   }, [endDance]);
 
-  // Reset local states when a new game starts
+  const handleMountTrain = useCallback((_lane: number) => {
+    setOnTrain(true);
+    playSound("jump");
+  }, [setOnTrain, playSound]);
+
+  const handleDismountTrain = useCallback(() => {
+    setOnTrain(false);
+  }, [setOnTrain]);
+
+  // Reset local states on new game
   useEffect(() => {
     if (playing) {
       setIsJumping(false);
@@ -274,20 +308,18 @@ export function Game() {
     }
   }, [playing]);
 
-  // When the dying animation finishes (1.2s), show game over screen
+  // Dying → game over after 1.2s
   useEffect(() => {
     if (dying) {
       if (dyingTimerRef.current) clearTimeout(dyingTimerRef.current);
-      dyingTimerRef.current = setTimeout(() => {
-        endGame();
-      }, 1200);
+      dyingTimerRef.current = setTimeout(() => { endGame(); }, 1200);
     }
     return () => {
       if (dyingTimerRef.current) { clearTimeout(dyingTimerRef.current); dyingTimerRef.current = null; }
     };
   }, [dying, endGame]);
 
-  // Speed ramp (only while playing)
+  // Speed ramp
   useEffect(() => {
     if (!playing) return;
     const id = setInterval(() => {
@@ -313,6 +345,8 @@ export function Game() {
             onTrainHorn={handleTrainHorn}
             onBigWatch={handleBigWatch}
             onDanceEnd={handleDanceEnd}
+            onMountTrain={handleMountTrain}
+            onDismountTrain={handleDismountTrain}
             isJumping={isJumping}
             isSliding={isSliding}
             onJumpComplete={handleJumpComplete}
