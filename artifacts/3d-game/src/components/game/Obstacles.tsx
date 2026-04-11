@@ -581,9 +581,9 @@ export function Obstacles({
     const g = groupRef.current;
     obsRef.current.forEach((o) => g.remove(o.mesh));
     obsRef.current = [];
-    spawnTimerRef.current    = 0;
+    spawnTimerRef.current    = -1.0; // extra 1s delay before first obstacle
     incomingTimerRef.current = 0;
-    hitCooldownRef.current   = 0;
+    hitCooldownRef.current   = 2.5; // 2.5s startup grace — no hits at game start
     playerVisualXRef.current = LANE_X[1]; // reset to center lane
   }, [playing]);
 

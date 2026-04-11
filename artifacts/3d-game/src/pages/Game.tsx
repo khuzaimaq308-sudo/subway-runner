@@ -231,6 +231,8 @@ export function Game() {
   useInput(handleInput, playing);
 
   const handleHit = useCallback(() => {
+    // Guard: only process hits while actively playing
+    if (useGameStore.getState().gameState !== "playing") return;
     playSound("hit");
     setIsHit(true);
     useGameStore.getState().loseLife();
@@ -256,6 +258,16 @@ export function Game() {
     stopHipHopBeat();
     endDance();
   }, [endDance]);
+
+  // Reset local states when a new game starts
+  useEffect(() => {
+    if (playing) {
+      setIsJumping(false);
+      setIsSliding(false);
+      setIsHit(false);
+      if (slideTimerRef.current) { clearTimeout(slideTimerRef.current); slideTimerRef.current = null; }
+    }
+  }, [playing]);
 
   // Speed ramp (only while playing)
   useEffect(() => {
