@@ -90,7 +90,8 @@ function GameScene({
   const { gameState, speed, lane } = useGameStore();
   const playing  = gameState === "playing";
   const dancing  = gameState === "dancing";
-  const active   = playing || dancing;   // track/obstacles still visible while dancing
+  const dying    = gameState === "dying";
+  const active   = playing || dancing || dying;   // track/obstacles still visible
 
   return (
     <>
@@ -110,6 +111,7 @@ function GameScene({
         isSliding={isSliding}
         isHit={isHit}
         isDancing={dancing}
+        isDying={dying}
         onJumpComplete={onJumpComplete}
         onDanceEnd={onDanceEnd}
       />
@@ -192,17 +194,19 @@ function FootstepLoop({ isJumping, isSliding, onStep }: { isJumping: boolean; is
 
 // ── Root component ────────────────────────────────────────────────────────
 export function Game() {
-  const { gameState, score, highScore, coins, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance } =
+  const { gameState, score, highScore, coins, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance, endGame } =
     useGameStore();
   const { play: playSound } = useSound();
 
   const [isJumping, setIsJumping]   = useState(false);
   const [isSliding, setIsSliding]   = useState(false);
   const [isHit,     setIsHit]       = useState(false);
-  const slideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slideTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dyingTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const playing = gameState === "playing";
   const dancing = gameState === "dancing";
+  const dying   = gameState === "dying";
 
   const handleInput = useCallback(
     (action: "left" | "right" | "jump" | "slide") => {
@@ -266,8 +270,22 @@ export function Game() {
       setIsSliding(false);
       setIsHit(false);
       if (slideTimerRef.current) { clearTimeout(slideTimerRef.current); slideTimerRef.current = null; }
+      if (dyingTimerRef.current) { clearTimeout(dyingTimerRef.current); dyingTimerRef.current = null; }
     }
   }, [playing]);
+
+  // When the dying animation finishes (1.2s), show game over screen
+  useEffect(() => {
+    if (dying) {
+      if (dyingTimerRef.current) clearTimeout(dyingTimerRef.current);
+      dyingTimerRef.current = setTimeout(() => {
+        endGame();
+      }, 1200);
+    }
+    return () => {
+      if (dyingTimerRef.current) { clearTimeout(dyingTimerRef.current); dyingTimerRef.current = null; }
+    };
+  }, [dying, endGame]);
 
   // Speed ramp (only while playing)
   useEffect(() => {

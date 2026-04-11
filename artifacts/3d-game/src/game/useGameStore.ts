@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type GameState = "menu" | "playing" | "dancing" | "gameover";
+export type GameState = "menu" | "playing" | "dancing" | "dying" | "gameover";
 export type Lane = -1 | 0 | 1;
 
 interface GameStore {
@@ -14,6 +14,7 @@ interface GameStore {
   coins: number;
 
   startGame: () => void;
+  startDying: () => void;
   endGame: () => void;
   goToMenu: () => void;
   addScore: (n: number) => void;
@@ -38,10 +39,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   startGame: () =>
     set({ gameState: "playing", score: 0, speed: 11, lane: 0, lives: 1, coins: 0 }),
 
-  endGame: () => {
+  startDying: () => {
     const { score, highScore } = get();
-    set({ gameState: "gameover", highScore: Math.max(score, highScore) });
+    set({ gameState: "dying", highScore: Math.max(score, highScore) });
   },
+
+  endGame: () => set({ gameState: "gameover" }),
 
   goToMenu: () => set({ gameState: "menu" }),
 
@@ -56,7 +59,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loseLife: () => {
     const { lives } = get();
     if (lives <= 1) {
-      get().endGame();
+      get().startDying();
     } else {
       set((s) => ({ lives: s.lives - 1 }));
     }

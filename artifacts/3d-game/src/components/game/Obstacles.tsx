@@ -12,6 +12,7 @@ interface ObstacleData {
   jumpable: boolean;
   slideOnly: boolean;
   extraSpeed: number;
+  halfZ: number;   // half-depth of the obstacle in Z (world units)
 }
 
 interface ObstaclesProps {
@@ -396,7 +397,7 @@ function makeBarrier(lane: number): ObstacleData {
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.1, 0.35), matYellow);
   stripe.position.set(0, 0.56, 0);
   group.add(bar, leg1, leg2, stripe);
-  return { mesh: group, lane, z: SPAWN_Z, type: "barrier", jumpable: true, slideOnly: false, extraSpeed: 0 };
+  return { mesh: group, lane, z: SPAWN_Z, type: "barrier", jumpable: true, slideOnly: false, extraSpeed: 0, halfZ: 0.2 };
 }
 
 function makeLowGate(lane: number): ObstacleData {
@@ -413,7 +414,7 @@ function makeLowGate(lane: number): ObstacleData {
   diag1.position.set(-1.1, 0.75, 0); diag1.rotation.z = 0.4;
   const diag2  = diag1.clone(); diag2.position.set(1.1, 0.75, 0);
   group.add(bar, stripe, post1, post2, diag1, diag2);
-  return { mesh: group, lane, z: SPAWN_Z, type: "low_gate", jumpable: false, slideOnly: true, extraSpeed: 0 };
+  return { mesh: group, lane, z: SPAWN_Z, type: "low_gate", jumpable: false, slideOnly: true, extraSpeed: 0, halfZ: 0.2 };
 }
 
 // ── Cartoon train car ─────────────────────────────────────────────────────
@@ -460,7 +461,7 @@ function makeTrainCar(lane: number): ObstacleData {
   outline.position.set(0, 1.1, 0);
   group.add(outline);
 
-  return { mesh: group, lane, z: SPAWN_Z, type: "train", jumpable: false, slideOnly: false, extraSpeed: 0 };
+  return { mesh: group, lane, z: SPAWN_Z, type: "train", jumpable: false, slideOnly: false, extraSpeed: 0, halfZ: 2.25 };
 }
 
 // ── Cartoon incoming locomotive ───────────────────────────────────────────
@@ -534,6 +535,7 @@ function makeIncomingTrain(lane: number): ObstacleData {
     jumpable: false,
     slideOnly: false,
     extraSpeed: 6,
+    halfZ: 4.3,   // nose tip (cowcatcher) is ~4.3 units ahead of group center
   };
 }
 
@@ -545,7 +547,7 @@ function makeBox(lane: number): ObstacleData {
   const edges = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), matBoxEdge);
   edges.position.set(0, 0.5, 0);
   group.add(body, edges);
-  return { mesh: group, lane, z: SPAWN_Z, type: "box", jumpable: true, slideOnly: false, extraSpeed: 0 };
+  return { mesh: group, lane, z: SPAWN_Z, type: "box", jumpable: true, slideOnly: false, extraSpeed: 0, halfZ: 0.51 };
 }
 
 // ── Main component ────────────────────────────────────────────────────────
@@ -651,12 +653,16 @@ export function Obstacles({
         // is already ~55% across a lane change, clearing hr=1.1 cleanly.
         const hr = obs.type === "incoming_train" ? 1.5 : obs.type === "train" ? 1.3 : 1.1;
 
-        // Signed Z: negative = obstacle still approaching, positive = already past player.
-        // Only allow hits while the obstacle is approaching OR has barely just arrived
-        // (up to +0.5 units past center — covers the physical overlap of large bodies).
-        const signedDz = obs.z - PLAYER_Z;
-        const aheadWindow = Math.max(2.0, actualMove * 4);   // look-ahead window
-        const pastWindow  = 0.5;                              // how far past is still a hit
+        // Accurate front-face collision:
+        // The obstacle's front face (+Z tip) is at obs.z + obs.halfZ.
+        // Hit triggers when the front face is within 0.45 units of the player (body buffer),
+        // and clears when the CENTER has moved 0.6 units past the player.
+        const frontFaceZ  = obs.z + obs.halfZ;               // world Z of the approaching face
+        const aheadWindow = obs.halfZ + 0.45;                // == front-face buffer from center
+        const pastWindow  = 0.6;
+        const signedDz    = obs.z - PLAYER_Z;
+        // Safety: also widen window by actualMove so fast obstacles never skip the window.
+        const effectiveAhead = Math.max(aheadWindow, actualMove * 4);
 
         let blocked = true;
         if (obs.jumpable && playerJumping)                                          blocked = false;
@@ -664,7 +670,8 @@ export function Obstacles({
         if (playerSliding && !obs.jumpable)                                         blocked = false;
         if (obs.slideOnly && playerJumping)                                         blocked = true;
 
-        if (dx < hr && signedDz > -aheadWindow && signedDz < pastWindow && blocked) {
+        void frontFaceZ; // used for reasoning; actual test is via signedDz + effectiveAhead
+        if (dx < hr && signedDz > -effectiveAhead && signedDz < pastWindow && blocked) {
           hitCooldownRef.current = 2.2;
           onHitRef.current();
         }

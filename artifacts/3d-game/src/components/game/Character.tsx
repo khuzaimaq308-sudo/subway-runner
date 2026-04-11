@@ -20,12 +20,13 @@ interface CharacterProps {
   isHit: boolean;
   isSliding: boolean;
   isDancing: boolean;
+  isDying: boolean;
   onJumpComplete: () => void;
   onDanceEnd: () => void;
 }
 
 export function Character({
-  lane, isJumping, isHit, isSliding, isDancing, onJumpComplete, onDanceEnd,
+  lane, isJumping, isHit, isSliding, isDancing, isDying, onJumpComplete, onDanceEnd,
 }: CharacterProps) {
   const { scene } = useThree();
   const { scene: gltfScene, animations } = useGLTF(`${import.meta.env.BASE_URL}models/character.glb`);
@@ -50,10 +51,13 @@ export function Character({
   const targetXRef       = useRef(LANE_X[lane + 1]);
   const danceTimeRef     = useRef(0);
   const prevDancingRef   = useRef(false);
+  const dyingTimeRef     = useRef(0);
+  const prevDyingRef     = useRef(false);
 
   const isJumpingRef  = useRef(isJumping);
   const isSlidingRef  = useRef(isSliding);
   const isDancingRef  = useRef(isDancing);
+  const isDyingRef    = useRef(isDying);
   const onCompleteRef = useRef(onJumpComplete);
   const onDanceEndRef = useRef(onDanceEnd);
   const prevJumpRef   = useRef(false);
@@ -62,6 +66,7 @@ export function Character({
   isJumpingRef.current  = isJumping;
   isSlidingRef.current  = isSliding;
   isDancingRef.current  = isDancing;
+  isDyingRef.current    = isDying;
   onCompleteRef.current = onJumpComplete;
   onDanceEndRef.current = onDanceEnd;
 
@@ -236,6 +241,44 @@ export function Character({
       run?.setEffectiveWeight(1);
       jumpProgressRef.current = 0;
       jumpDoneRef.current     = false;
+    }
+
+    // ── Dying (fall) animation ───────────────────────────────────────────
+    const dying = isDyingRef.current;
+    if (dying) {
+      if (!prevDyingRef.current) {
+        // First frame of dying: stop all anims, freeze hit-shake, reset pose
+        dyingTimeRef.current = 0;
+        hitTimerRef.current  = 0;
+        root.rotation.z      = 0;
+        run?.setEffectiveWeight(0);
+        jump?.setEffectiveWeight(0);
+        slide?.setEffectiveWeight(0);
+        dance?.setEffectiveWeight(0);
+      }
+      prevDyingRef.current = true;
+      dyingTimeRef.current += delta;
+      const t = Math.min(1, dyingTimeRef.current / 0.9); // 0.9s fall duration
+
+      // Lean forward (rotate around X axis toward +Z = falling forward)
+      root.rotation.x = -t * (Math.PI * 0.48);
+      // Shift slightly in the direction of fall (forward = -Z for the camera)
+      root.position.z = -t * 0.6;
+      // Sink into ground as they fall
+      root.position.y = Math.max(0, (1 - t) * root.position.y - t * 0.15);
+
+      // Advance mixer with 0 delta to keep pose frozen
+      mixerRef.current.update(0);
+      return;
+    }
+
+    // Falling edge of dying — clear
+    if (prevDyingRef.current && !dying) {
+      prevDyingRef.current = false;
+      root.rotation.x = 0;
+      root.position.z = 0;
+      root.position.y = 0;
+      dyingTimeRef.current = 0;
     }
 
     // ── Normal running mode ─────────────────────────────────────────────
