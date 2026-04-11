@@ -590,9 +590,11 @@ export function Obstacles({
   useFrame((_, delta) => {
     if (!playing) return;
 
-    // Keep visual X in sync with the character's actual slide animation
+    // Keep visual X in sync with the character's actual slide animation.
+    // Use a fast lerp (delta*22) so that after ~3 frames at 60fps the player
+    // is already 60% of the way across the lane — clearing the tight hit radius quickly.
     const targetX = LANE_X[playerLane];
-    playerVisualXRef.current += (targetX - playerVisualXRef.current) * Math.min(1, delta * 14);
+    playerVisualXRef.current += (targetX - playerVisualXRef.current) * Math.min(1, delta * 22);
 
     spawnTimerRef.current    += delta;
     incomingTimerRef.current += delta;
@@ -644,15 +646,17 @@ export function Obstacles({
         // Use the smoothed visual position so lane-swap inputs don't cause
         // phantom hits before the character has physically arrived in the new lane.
         const dx = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
-        const hr = obs.type === "incoming_train" ? 2.2 : obs.type === "train" ? 2.0 : 1.8;
+        // Tight hit radii — lanes are 2.5 units apart.
+        // With visual-X tracking at delta*22, after 3 frames (~0.05s) the player
+        // is already ~55% across a lane change, clearing hr=1.1 cleanly.
+        const hr = obs.type === "incoming_train" ? 1.5 : obs.type === "train" ? 1.3 : 1.1;
 
         // Signed Z: negative = obstacle still approaching, positive = already past player.
         // Only allow hits while the obstacle is approaching OR has barely just arrived
-        // (up to +0.6 units past center — covers the physical overlap of large train bodies).
-        // Anything more positive means the obstacle flew past and should NOT register.
+        // (up to +0.5 units past center — covers the physical overlap of large bodies).
         const signedDz = obs.z - PLAYER_Z;
-        const aheadWindow = Math.max(2.4, actualMove * 4);   // look-ahead window
-        const pastWindow  = 0.6;                              // how far past is still a hit
+        const aheadWindow = Math.max(2.0, actualMove * 4);   // look-ahead window
+        const pastWindow  = 0.5;                              // how far past is still a hit
 
         let blocked = true;
         if (obs.jumpable && playerJumping)                                          blocked = false;

@@ -36,12 +36,16 @@ function CameraRig({ isJumping, speed, isDancing }: { isJumping: boolean; speed:
     const smooth = Math.min(1, delta * 4);
 
     if (isDancing) {
-      // Swing in front of character, looking at them
-      camYRef.current  += (2.5 - camYRef.current)   * smooth;
-      camZRef.current  += (5.5 - camZRef.current)   * smooth;
+      // Zoom close in front of the dancing character
+      camYRef.current  += (1.6 - camYRef.current)   * smooth;
+      camZRef.current  += (2.8 - camZRef.current)   * smooth;
       camXRef.current  += (0   - camXRef.current)   * smooth;
-      lookYRef.current += (1.2 - lookYRef.current)  * smooth;
+      lookYRef.current += (1.1 - lookYRef.current)  * smooth;
       lookZRef.current += (0   - lookZRef.current)  * smooth;
+      // Also narrow FOV for a tighter portrait feel
+      const pc = camera as THREE.PerspectiveCamera;
+      pc.fov += (58 - pc.fov) * Math.min(1, delta * 3);
+      pc.updateProjectionMatrix();
     } else {
       // Normal behind-character view
       const targetY = isJumping ? 5.0 : 4.4;
