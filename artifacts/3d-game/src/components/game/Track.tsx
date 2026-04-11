@@ -146,25 +146,6 @@ export function Track({ speed, playing }: TrackProps) {
             </group>
           ))}
 
-          {/* ── Signal / marker posts between lanes ── */}
-          {([-1.25, 1.25] as const).map((dx, pi) =>
-            Array.from({ length: Math.ceil(TRACK_LENGTH / 8) }, (_, k) => (
-              <group key={`${pi}-${k}`} position={[dx, 0, -TRACK_LENGTH / 2 + k * 8 + 4]}>
-                <mesh position={[0, 0.5, 0]}>
-                  <cylinderGeometry args={[0.04, 0.04, 1.0, 7]} />
-                  <meshLambertMaterial color="#dddddd" />
-                </mesh>
-                <mesh position={[0, 1.06, 0]}>
-                  <sphereGeometry args={[0.1, 8, 6]} />
-                  <meshLambertMaterial
-                    color="#FFE000"
-                    emissive="#FFE000"
-                    emissiveIntensity={1.4}
-                  />
-                </mesh>
-              </group>
-            ))
-          )}
 
           {/* ── Side buildings ── */}
           {[

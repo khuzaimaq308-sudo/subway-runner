@@ -135,7 +135,7 @@ export function Coins({ speed, playing, playerLane, onCollect }: CoinsProps) {
     timeRef.current += delta;
     spawnTimerRef.current += delta;
 
-    const spawnInterval = Math.max(0.8, 1.5 - speed * 0.018);
+    const spawnInterval = Math.max(2.5, 4.5 - speed * 0.02);
     if (spawnTimerRef.current >= spawnInterval) {
       spawnTimerRef.current = 0;
       const lane  = Math.floor(Math.random() * 3);
