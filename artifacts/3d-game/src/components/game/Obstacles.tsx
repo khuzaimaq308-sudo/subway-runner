@@ -643,19 +643,25 @@ export function Obstacles({
       if (hitCooldownRef.current <= 0) {
         // Use the smoothed visual position so lane-swap inputs don't cause
         // phantom hits before the character has physically arrived in the new lane.
-        const dx  = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
-        const dz  = Math.abs(obs.z - PLAYER_Z);
-        const hr  = obs.type === "incoming_train" ? 2.2 : obs.type === "train" ? 2.0 : 1.8;
-        const dzt = Math.max(2.4, actualMove * 4);
+        const dx = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
+        const hr = obs.type === "incoming_train" ? 2.2 : obs.type === "train" ? 2.0 : 1.8;
+
+        // Signed Z: negative = obstacle still approaching, positive = already past player.
+        // Only allow hits while the obstacle is approaching OR has barely just arrived
+        // (up to +0.6 units past center — covers the physical overlap of large train bodies).
+        // Anything more positive means the obstacle flew past and should NOT register.
+        const signedDz = obs.z - PLAYER_Z;
+        const aheadWindow = Math.max(2.4, actualMove * 4);   // look-ahead window
+        const pastWindow  = 0.6;                              // how far past is still a hit
 
         let blocked = true;
-        if (obs.jumpable && playerJumping)                                    blocked = false;
+        if (obs.jumpable && playerJumping)                                          blocked = false;
         if ((obs.type === "train" || obs.type === "incoming_train") && playerJumping) blocked = false;
-        if (playerSliding && !obs.jumpable)                                   blocked = false;
-        if (obs.slideOnly && playerJumping)                                   blocked = true;
+        if (playerSliding && !obs.jumpable)                                         blocked = false;
+        if (obs.slideOnly && playerJumping)                                         blocked = true;
 
-        if (dx < hr && dz < dzt && blocked) {
-          hitCooldownRef.current = 2.2;   // was 1.8 — wider grace window after a hit
+        if (dx < hr && signedDz > -aheadWindow && signedDz < pastWindow && blocked) {
+          hitCooldownRef.current = 2.2;
           onHitRef.current();
         }
       }

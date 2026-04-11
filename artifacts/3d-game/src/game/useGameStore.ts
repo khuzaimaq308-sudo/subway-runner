@@ -32,11 +32,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   speed: 11,
   speedBeforeDance: 11,
   lane: 0,
-  lives: 3,
+  lives: 1,
   coins: 0,
 
   startGame: () =>
-    set({ gameState: "playing", score: 0, speed: 11, lane: 0, lives: 3, coins: 0 }),
+    set({ gameState: "playing", score: 0, speed: 11, lane: 0, lives: 1, coins: 0 }),
 
   endGame: () => {
     const { score, highScore } = get();

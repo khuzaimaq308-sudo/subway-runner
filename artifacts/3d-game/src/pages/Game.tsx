@@ -209,7 +209,7 @@ function DanceOverlay({ visible }: { visible: boolean }) {
 
 // ── Root component ────────────────────────────────────────────────────────
 export function Game() {
-  const { gameState, score, highScore, lives, coins, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance } =
+  const { gameState, score, highScore, coins, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance } =
     useGameStore();
   const { play: playSound } = useSound();
 
@@ -313,7 +313,7 @@ export function Game() {
           />
         </Canvas>
 
-        <HUD score={score} lives={lives} coins={coins} visible={playing || dancing} />
+        <HUD score={score} coins={coins} visible={playing || dancing} />
         <DanceOverlay visible={dancing} />
 
         {gameState === "menu" && (
