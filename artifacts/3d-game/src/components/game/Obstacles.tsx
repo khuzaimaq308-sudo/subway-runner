@@ -558,6 +558,10 @@ export function Obstacles({
   const spawnTimerRef    = useRef(0);
   const incomingTimerRef = useRef(0);
   const hitCooldownRef   = useRef(0);
+  // Tracks the player's VISUAL x position with the same lerp Character uses.
+  // This prevents phantom hits that fire the instant a lane-swap is registered
+  // in the store but before the character has physically moved there.
+  const playerVisualXRef = useRef(LANE_X[playerLane]);
   const onHitRef  = useRef(onHit);
   const onHornRef = useRef(onTrainHorn);
   onHitRef.current  = onHit;
@@ -580,32 +584,30 @@ export function Obstacles({
     spawnTimerRef.current    = 0;
     incomingTimerRef.current = 0;
     hitCooldownRef.current   = 0;
+    playerVisualXRef.current = LANE_X[1]; // reset to center lane
   }, [playing]);
 
   useFrame((_, delta) => {
     if (!playing) return;
 
+    // Keep visual X in sync with the character's actual slide animation
+    const targetX = LANE_X[playerLane];
+    playerVisualXRef.current += (targetX - playerVisualXRef.current) * Math.min(1, delta * 14);
+
     spawnTimerRef.current    += delta;
     incomingTimerRef.current += delta;
     if (hitCooldownRef.current > 0) hitCooldownRef.current -= delta;
 
-    // Regular obstacles
+    // Regular obstacles – spawn in any lane, no artificial safe lane.
     const interval = Math.max(1.4, 3.2 - speed * 0.07);
     if (spawnTimerRef.current >= interval) {
       spawnTimerRef.current = 0;
-      const numObs = Math.random() < 0.28 ? 2 : 1;
-
-      // For double-obstacle waves always keep player's lane free.
-      // For single-obstacle waves keep player's lane free 65% of the time
-      // (35% of single spawns can land in the player's lane – intentional challenge).
-      const blockPlayer = numObs > 1 || Math.random() < 0.65;
-      const safeLane    = blockPlayer ? playerLane : -1;   // -1 means "no safe lane"
-
-      const used = new Set<number>();
+      const numObs  = Math.random() < 0.28 ? 2 : 1;
+      const used    = new Set<number>();
       for (let i = 0; i < numObs; i++) {
         let lane  = Math.floor(Math.random() * 3);
         let tries = 0;
-        while ((used.has(lane) || lane === safeLane) && tries < 10) {
+        while (used.has(lane) && tries < 10) {
           lane = Math.floor(Math.random() * 3); tries++;
         }
         used.add(lane);
@@ -639,7 +641,9 @@ export function Obstacles({
       obs.mesh.position.z = obs.z;
 
       if (hitCooldownRef.current <= 0) {
-        const dx  = Math.abs(LANE_X[obs.lane] - LANE_X[playerLane]);
+        // Use the smoothed visual position so lane-swap inputs don't cause
+        // phantom hits before the character has physically arrived in the new lane.
+        const dx  = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
         const dz  = Math.abs(obs.z - PLAYER_Z);
         const hr  = obs.type === "incoming_train" ? 2.2 : obs.type === "train" ? 2.0 : 1.8;
         const dzt = Math.max(2.4, actualMove * 4);
