@@ -285,24 +285,34 @@ export function Character({
       dyingTimeRef.current = 0;
     }
 
-    // ── Normal running mode ─────────────────────────────────────────────
-    if (jumping && !prevJumpRef.current && jump) {
-      jump.reset(); jump.play();
-      jumpProgressRef.current = 0;
-      jumpDoneRef.current = false;
-    }
-    if (sliding && !prevSlideRef.current && slide) {
-      slide.reset(); slide.play();
-    }
-    prevJumpRef.current  = jumping;
-    prevSlideRef.current = sliding;
+    // ── Normal running mode (skipped during jetpack — mixer frozen instead) ─
+    if (!isJetpack) {
+      if (jumping && !prevJumpRef.current && jump) {
+        jump.reset(); jump.play();
+        jumpProgressRef.current = 0;
+        jumpDoneRef.current = false;
+      }
+      if (sliding && !prevSlideRef.current && slide) {
+        slide.reset(); slide.play();
+      }
+      prevJumpRef.current  = jumping;
+      prevSlideRef.current = sliding;
 
-    mixerRef.current.update(delta);
+      mixerRef.current.update(delta);
 
-    const f = Math.min(1, delta * BLEND);
-    if (run)   run.setEffectiveWeight(THREE.MathUtils.lerp(run.getEffectiveWeight(),   (!jumping && !sliding) ? 1 : 0, f));
-    if (jump)  jump.setEffectiveWeight(THREE.MathUtils.lerp(jump.getEffectiveWeight(),  jumping ? 1 : 0, f));
-    if (slide) slide.setEffectiveWeight(THREE.MathUtils.lerp(slide.getEffectiveWeight(), sliding ? 1 : 0, f));
+      const f = Math.min(1, delta * BLEND);
+      if (run)   run.setEffectiveWeight(THREE.MathUtils.lerp(run.getEffectiveWeight(),   (!jumping && !sliding) ? 1 : 0, f));
+      if (jump)  jump.setEffectiveWeight(THREE.MathUtils.lerp(jump.getEffectiveWeight(),  jumping ? 1 : 0, f));
+      if (slide) slide.setEffectiveWeight(THREE.MathUtils.lerp(slide.getEffectiveWeight(), sliding ? 1 : 0, f));
+    } else {
+      // Jetpack: freeze animation completely — zero all weights, don't advance mixer
+      if (!prevJetpackRef.current) {
+        run?.setEffectiveWeight(0);
+        jump?.setEffectiveWeight(0);
+        slide?.setEffectiveWeight(0);
+      }
+      mixerRef.current.update(0);
+    }
 
     // Root-motion lock
     const cloned = clonedRef.current;
@@ -316,12 +326,6 @@ export function Character({
     // Jetpack: Superman pose — float high, tilt horizontal, slow spin
     if (isJetpack && !isOnTrain) {
       const cloned = clonedRef.current as THREE.Object3D | null;
-      // On first jetpack frame: freeze walk/jump/slide animations
-      if (!prevJetpackRef.current) {
-        run?.setEffectiveWeight(0);
-        jump?.setEffectiveWeight(0);
-        slide?.setEffectiveWeight(0);
-      }
       prevJetpackRef.current = true;
 
       // Float high (7 units up)

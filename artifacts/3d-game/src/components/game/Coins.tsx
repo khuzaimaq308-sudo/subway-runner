@@ -163,9 +163,11 @@ export function Coins({ speed, playing, playerLane, onCollect }: CoinsProps) {
         w.mesh.position.x = w.attractX;
       }
 
-      // Coins always stay at ground level — collected by player passing through lane
-      const bobY = WATCH_Y + Math.sin(timeRef.current * 2.5 + w.bobOffset) * 0.055;
-      w.mesh.position.y = bobY;
+      // During jetpack, coins float up to player height (7.0); otherwise bob at ground level
+      const targetY = pwr === "jetpack"
+        ? 7.0
+        : WATCH_Y + Math.sin(timeRef.current * 2.5 + w.bobOffset) * 0.055;
+      w.mesh.position.y += (targetY - w.mesh.position.y) * Math.min(1, delta * 5);
       w.mesh.rotation.y = timeRef.current * 0.52;
 
       // Collect logic — same radius regardless of powerup

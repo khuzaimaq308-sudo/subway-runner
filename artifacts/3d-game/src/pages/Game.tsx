@@ -46,12 +46,12 @@ function CameraRig({ isJumping, speed, isDancing, isOnTrain, isJetpack }: { isJu
       pc.fov += (58 - pc.fov) * Math.min(1, delta * 3);
       pc.updateProjectionMatrix();
     } else if (isJetpack) {
-      // Camera rises with player (player is at Y=7); pull back further so we see the full flight
-      camYRef.current  += (11.5 - camYRef.current)  * Math.min(1, delta * 3);
-      camZRef.current  += (7.5  - camZRef.current)  * smooth;
-      camXRef.current  += (0    - camXRef.current)  * smooth;
-      lookYRef.current += (4.0  - lookYRef.current) * smooth;
-      lookZRef.current += (-10  - lookZRef.current) * smooth;
+      // Camera tracks player up (player is at Y=7) — closer than before
+      camYRef.current  += (9.5 - camYRef.current)  * Math.min(1, delta * 3.5);
+      camZRef.current  += (5.5 - camZRef.current)  * smooth;
+      camXRef.current  += (0   - camXRef.current)  * smooth;
+      lookYRef.current += (5.5 - lookYRef.current) * smooth;
+      lookZRef.current += (-10 - lookZRef.current) * smooth;
     } else {
       const targetY = isOnTrain ? 6.0 : (isJumping ? 5.0 : 4.4);
       camYRef.current  += (targetY - camYRef.current) * Math.min(1, delta * 5);

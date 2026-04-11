@@ -535,16 +535,19 @@ export function Obstacles({
             continue; // still approaching or just mounted — no hit
           }
 
-          // When on a ramp train, skip GROUND obstacles (they're below the player).
-          // Incoming trains at track height can still kill.
-          if (playerOnTrain && obs.type !== "incoming_train") continue;
+          // When on a ramp train, only skip barriers/boxes/low_gates that sit on
+          // the ground below the player's feet. ALL trains still kill.
+          if (playerOnTrain && (obs.type === "barrier" || obs.type === "box" || obs.type === "low_gate")) continue;
 
-          // Normal collision
+          // Everything else: train, ramp_train, incoming_train = always deadly.
+          // Normal dodge rules only apply on the ground.
           let blocked = true;
-          if (obs.jumpable && playerJumping)                                            blocked = false;
-          if ((obs.type === "train" || obs.type === "incoming_train") && playerJumping) blocked = false;
-          if (playerSliding && !obs.jumpable)                                           blocked = false;
-          if (obs.slideOnly && playerJumping)                                           blocked = true;
+          if (!playerOnTrain) {
+            if (obs.jumpable && playerJumping)                                            blocked = false;
+            if ((obs.type === "train" || obs.type === "incoming_train") && playerJumping) blocked = false;
+            if (playerSliding && !obs.jumpable)                                           blocked = false;
+            if (obs.slideOnly && playerJumping)                                           blocked = true;
+          }
 
           if (blocked) {
             hitCooldownRef.current = 2.2;
