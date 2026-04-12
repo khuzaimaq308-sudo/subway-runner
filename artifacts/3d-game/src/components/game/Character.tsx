@@ -285,8 +285,15 @@ export function Character({
       dyingTimeRef.current = 0;
     }
 
-    // ── Normal running mode (skipped during jetpack — mixer frozen instead) ─
+    // ── Normal running mode ──────────────────────────────────────────────
     if (!isJetpack) {
+      // Unfreeze if coming back from jetpack
+      if (prevJetpackRef.current) {
+        if (run)   { (run as any).paused = false; run.setEffectiveWeight(1); }
+        if (jump)  { (jump as any).paused  = false; }
+        if (slide) { (slide as any).paused = false; }
+      }
+
       if (jumping && !prevJumpRef.current && jump) {
         jump.reset(); jump.play();
         jumpProgressRef.current = 0;
@@ -305,13 +312,13 @@ export function Character({
       if (jump)  jump.setEffectiveWeight(THREE.MathUtils.lerp(jump.getEffectiveWeight(),  jumping ? 1 : 0, f));
       if (slide) slide.setEffectiveWeight(THREE.MathUtils.lerp(slide.getEffectiveWeight(), sliding ? 1 : 0, f));
     } else {
-      // Jetpack: freeze animation completely — zero all weights, don't advance mixer
+      // Jetpack: pause animation in current pose (keeps mid-stride look, not T-pose)
       if (!prevJetpackRef.current) {
-        run?.setEffectiveWeight(0);
-        jump?.setEffectiveWeight(0);
-        slide?.setEffectiveWeight(0);
+        if (run)   { run.setEffectiveWeight(1);  (run as any).paused   = true; }
+        if (jump)  { jump.setEffectiveWeight(0); (jump as any).paused  = true; }
+        if (slide) { slide.setEffectiveWeight(0); (slide as any).paused = true; }
       }
-      mixerRef.current.update(0);
+      mixerRef.current.update(0); // don't advance — keep frozen pose
     }
 
     // Root-motion lock

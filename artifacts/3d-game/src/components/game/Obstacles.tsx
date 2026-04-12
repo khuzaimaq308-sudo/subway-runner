@@ -466,9 +466,10 @@ export function Obstacles({
       onHornRef.current();
     }
 
-    // Move + collision
+    // ── Move all obstacles + collision detection ──────────────────────────
     const toRemove: ObstacleData[] = [];
     const frameMove = speed * delta;
+
     for (const obs of obsRef.current) {
       const actualMove = frameMove + obs.extraSpeed * delta;
       obs.z += actualMove;
@@ -490,9 +491,10 @@ export function Obstacles({
           }
         }
         if (laneChanged) {
-          // Player jumped to a new lane while on train
+          // Look for adjacent ramp_train near same Z position (within 20 units)
           const neighbour = obsRef.current.find(
-            (o) => o !== obs && o.type === "ramp_train" && o.lane === playerLane && o.z > -14 && o.z < 6,
+            (o) => o !== obs && o.type === "ramp_train" && o.lane === playerLane
+                && Math.abs(o.z - obs.z) < 20,
           );
           if (neighbour) {
             mountedTrainRef.current = neighbour;
@@ -502,7 +504,7 @@ export function Obstacles({
             onDismountRef.current();
           }
         }
-        // Dismount when back of train cars passes player
+        // Dismount when back end of train passes player
         const trainBackZ = obs.z - obs.halfZ + 1.8;
         if (trainBackZ > PLAYER_Z + 0.4) {
           mountedTrainRef.current = null;
@@ -512,48 +514,57 @@ export function Obstacles({
         continue;
       }
 
-      if (hitCooldownRef.current <= 0 && !playerJetpack) {
-        const dx = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
-        const hr = obs.type === "incoming_train" ? 1.5 : obs.type === "train" || obs.type === "ramp_train" ? 1.3 : 1.1;
+      // Jetpack = full immunity
+      if (playerJetpack) { if (obs.z > DESPAWN_Z) toRemove.push(obs); continue; }
 
-        // Collision window: front face arrives → back face clears the player.
-        // pastWindow = obs.halfZ so we keep collision active until obstacle fully passes.
-        const aheadWindow    = obs.halfZ + 0.12;
-        const effectiveAhead = aheadWindow + actualMove;
-        const pastWindow     = obs.halfZ;   // full obstacle depth — no more ghost-passing
-        const signedDz       = obs.z - PLAYER_Z;
+      // Post-hit invincibility window
+      if (hitCooldownRef.current > 0) { if (obs.z > DESPAWN_Z) toRemove.push(obs); continue; }
 
-        if (dx < hr && signedDz > -effectiveAhead && signedDz < pastWindow) {
-          // ── Ramp train: auto-mount when front face arrives ────────────
-          if (obs.type === "ramp_train" && !playerOnTrain) {
-            const frontFaceZ = obs.z + obs.halfZ;
-            if (frontFaceZ > -1.5 && frontFaceZ < 3.0) {
-              hitCooldownRef.current  = 2.8;
-              mountedTrainRef.current = obs;
-              onMountRef.current(obs.lane);
-            }
-            continue; // still approaching or just mounted — no hit
-          }
+      // ── Spatial overlap check ─────────────────────────────────────────
+      const dx = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
+      const hr = obs.type === "incoming_train" ? 1.5
+               : (obs.type === "train" || obs.type === "ramp_train") ? 1.3 : 1.1;
 
-          // When on a ramp train, only skip barriers/boxes/low_gates that sit on
-          // the ground below the player's feet. ALL trains still kill.
-          if (playerOnTrain && (obs.type === "barrier" || obs.type === "box" || obs.type === "low_gate")) continue;
+      // Collision zone: [front face z, back face z] relative to player
+      // Front face (first to arrive) = obs.z + halfZ  (obstacle moving in +z)
+      // Back  face (last to leave)   = obs.z - halfZ
+      const signedDz   = obs.z - PLAYER_Z;
+      const frontReach = obs.halfZ + 0.12 + actualMove; // include this-frame movement
+      const inZone     = signedDz > -frontReach && signedDz < obs.halfZ;
 
-          // Everything else: train, ramp_train, incoming_train = always deadly.
-          // Normal dodge rules only apply on the ground.
-          let blocked = true;
-          if (!playerOnTrain) {
-            if (obs.jumpable && playerJumping)                                            blocked = false;
-            if ((obs.type === "train" || obs.type === "incoming_train") && playerJumping) blocked = false;
-            if (playerSliding && !obs.jumpable)                                           blocked = false;
-            if (obs.slideOnly && playerJumping)                                           blocked = true;
-          }
+      if (!(dx < hr && inZone)) { if (obs.z > DESPAWN_Z) toRemove.push(obs); continue; }
 
-          if (blocked) {
-            hitCooldownRef.current = 2.2;
-            onHitRef.current();
-          }
+      // ── Ramp train: auto-mount (never directly fatal) ─────────────────
+      if (obs.type === "ramp_train" && !playerOnTrain) {
+        const frontFaceZ = obs.z + obs.halfZ;
+        if (frontFaceZ > -2.0 && frontFaceZ < 3.5) {
+          hitCooldownRef.current  = 2.8;
+          mountedTrainRef.current = obs;
+          onMountRef.current(obs.lane);
         }
+        // Ramp train never directly kills — either mount or pass (by design)
+        if (obs.z > DESPAWN_Z) toRemove.push(obs);
+        continue;
+      }
+
+      // ── Ground obstacles below elevated player (on ramp train) ───────
+      if (playerOnTrain && (obs.type === "barrier" || obs.type === "box" || obs.type === "low_gate")) {
+        if (obs.z > DESPAWN_Z) toRemove.push(obs); continue;
+      }
+
+      // ── Dodge rules (ground only, no exceptions for trains) ──────────
+      let blocked = true;
+      if (!playerOnTrain) {
+        if (obs.jumpable && playerJumping)              blocked = false; // jump over low barriers/boxes
+        if (obs.slideOnly && playerJumping)             blocked = true;  // can't jump a low gate
+        if (playerSliding && obs.slideOnly)             blocked = false; // slide under low gate
+        if (obs.jumpable && playerSliding)              blocked = false; // slide under jumpable barrier
+        // Trains and incoming trains: NO jump exception — switch lanes to avoid
+      }
+
+      if (blocked) {
+        hitCooldownRef.current = 2.2;
+        onHitRef.current();
       }
 
       if (obs.z > DESPAWN_Z) toRemove.push(obs);
