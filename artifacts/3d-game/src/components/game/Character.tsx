@@ -10,7 +10,8 @@ const MODEL_SCALE   = 1.0;
 const JUMP_TIMESCALE  = 2.8;
 const SLIDE_TIMESCALE = 1.7;
 const BLEND       = 12;
-const JUMP_HEIGHT  = 1.6;
+const JUMP_HEIGHT        = 1.6;  // ground-level jump
+const JUMP_HEIGHT_TRAIN  = 2.4;  // bigger arc when already elevated on a train
 const JUMP_DURATION = 0.85;
 const DANCE_DURATION = 8.1;   // matches Bubble_Dance clip length
 
@@ -354,10 +355,11 @@ export function Character({
       if (cloned) cloned.rotation.y = Math.PI;
       run?.setEffectiveWeight(1);
     }
-    // Jump arc (from current ground level)
+    // Jump arc (from current ground level — bigger arc when on a train)
     else if (jumping) {
       jumpProgressRef.current = Math.min(1, jumpProgressRef.current + delta / JUMP_DURATION);
-      root.position.y = groundLevel + Math.sin(jumpProgressRef.current * Math.PI) * JUMP_HEIGHT;
+      const jh = isOnTrain ? JUMP_HEIGHT_TRAIN : JUMP_HEIGHT;
+      root.position.y = groundLevel + Math.sin(jumpProgressRef.current * Math.PI) * jh;
       if (jumpProgressRef.current >= 0.92 && !jumpDoneRef.current) {
         jumpDoneRef.current = true;
         onCompleteRef.current();

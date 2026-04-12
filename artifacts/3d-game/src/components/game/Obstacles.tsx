@@ -517,24 +517,18 @@ export function Obstacles({
       // Jetpack = full immunity
       if (playerJetpack) { if (obs.z > DESPAWN_Z) toRemove.push(obs); continue; }
 
-      // Post-hit invincibility window
-      if (hitCooldownRef.current > 0) { if (obs.z > DESPAWN_Z) toRemove.push(obs); continue; }
-
-      // ── Spatial overlap check ─────────────────────────────────────────
+      // ── Spatial overlap — computed once for all branches ──────────────
       const dx = Math.abs(LANE_X[obs.lane] - playerVisualXRef.current);
       const hr = obs.type === "incoming_train" ? 1.5
                : (obs.type === "train" || obs.type === "ramp_train") ? 1.3 : 1.1;
-
-      // Collision zone: [front face z, back face z] relative to player
-      // Front face (first to arrive) = obs.z + halfZ  (obstacle moving in +z)
-      // Back  face (last to leave)   = obs.z - halfZ
       const signedDz   = obs.z - PLAYER_Z;
-      const frontReach = obs.halfZ + 0.12 + actualMove; // include this-frame movement
-      const inZone     = signedDz > -frontReach && signedDz < obs.halfZ;
+      const frontReach = obs.halfZ + 0.12 + actualMove;
+      const inZone     = dx < hr && signedDz > -frontReach && signedDz < obs.halfZ;
 
-      if (!(dx < hr && inZone)) { if (obs.z > DESPAWN_Z) toRemove.push(obs); continue; }
+      if (!inZone) { if (obs.z > DESPAWN_Z) toRemove.push(obs); continue; }
 
-      // ── Ramp train: auto-mount (never directly fatal) ─────────────────
+      // ── Ramp train: auto-mount — checked BEFORE hit-cooldown so that
+      //    mounting companion trains is never blocked by the previous mount ─
       if (obs.type === "ramp_train" && !playerOnTrain) {
         const frontFaceZ = obs.z + obs.halfZ;
         if (frontFaceZ > -2.0 && frontFaceZ < 3.5) {
@@ -542,10 +536,13 @@ export function Obstacles({
           mountedTrainRef.current = obs;
           onMountRef.current(obs.lane);
         }
-        // Ramp train never directly kills — either mount or pass (by design)
+        // Ramp train never directly kills — either mount or pass
         if (obs.z > DESPAWN_Z) toRemove.push(obs);
         continue;
       }
+
+      // Post-hit invincibility window (doesn't block ramp-train mounts above)
+      if (hitCooldownRef.current > 0) { if (obs.z > DESPAWN_Z) toRemove.push(obs); continue; }
 
       // ── Ground obstacles below elevated player (on ramp train) ───────
       if (playerOnTrain && (obs.type === "barrier" || obs.type === "box" || obs.type === "low_gate")) {
@@ -555,11 +552,11 @@ export function Obstacles({
       // ── Dodge rules (ground only, no exceptions for trains) ──────────
       let blocked = true;
       if (!playerOnTrain) {
-        if (obs.jumpable && playerJumping)              blocked = false; // jump over low barriers/boxes
-        if (obs.slideOnly && playerJumping)             blocked = true;  // can't jump a low gate
-        if (playerSliding && obs.slideOnly)             blocked = false; // slide under low gate
-        if (obs.jumpable && playerSliding)              blocked = false; // slide under jumpable barrier
-        // Trains and incoming trains: NO jump exception — switch lanes to avoid
+        if (obs.jumpable && playerJumping)  blocked = false; // jump over low barriers/boxes
+        if (obs.slideOnly && playerJumping) blocked = true;  // can't jump a low gate
+        if (playerSliding && obs.slideOnly) blocked = false; // slide under low gate
+        if (obs.jumpable && playerSliding)  blocked = false; // slide under jumpable barrier
+        // Trains: NO jump exception — must switch lanes
       }
 
       if (blocked) {
