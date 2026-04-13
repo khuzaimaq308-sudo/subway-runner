@@ -3,10 +3,11 @@ import { useGameStore } from "@/game/useGameStore";
 interface HUDProps {
   score: number;
   coins: number;
+  watches: number;
   visible: boolean;
 }
 
-export function HUD({ score, coins, visible }: HUDProps) {
+export function HUD({ score, coins, watches, visible }: HUDProps) {
   const { powerup, powerupTime } = useGameStore();
 
   if (!visible) return null;
@@ -53,10 +54,34 @@ export function HUD({ score, coins, visible }: HUDProps) {
         </div>
       )}
 
-      {/* Coins */}
-      <div style={{ background:"rgba(0,0,0,0.65)", backdropFilter:"blur(8px)", borderRadius:"14px", padding:"10px 18px", border:"1px solid rgba(255,215,0,0.3)", display:"flex", alignItems:"center", gap:"6px" }}>
-        <span style={{ fontSize:"20px" }}>⌚</span>
-        <span style={{ color:"#FFD700", fontSize:"22px", fontWeight:700 }}>{coins}</span>
+      {/* Right side — watches this game + coins */}
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
+        {/* This game's watch count */}
+        <div style={{
+          background:"rgba(0,0,0,0.65)", backdropFilter:"blur(8px)",
+          borderRadius:"14px", padding:"10px 18px",
+          border:"1px solid rgba(255,215,0,0.3)",
+          display:"flex", alignItems:"center", gap:"8px",
+        }}>
+          <span style={{ fontSize:"20px" }}>⌚</span>
+          <div>
+            <div style={{ color:"rgba(255,215,0,0.55)", fontSize:"9px", fontWeight:700, letterSpacing:1.5, lineHeight:1 }}>THIS GAME</div>
+            <div style={{ color:"#FFD700", fontSize:"22px", fontWeight:800, lineHeight:1.1 }}>{watches}</div>
+          </div>
+        </div>
+
+        {/* Coins (small chips / regular collectibles) */}
+        {coins > 0 && (
+          <div style={{
+            background:"rgba(0,0,0,0.5)", backdropFilter:"blur(6px)",
+            borderRadius:"10px", padding:"6px 14px",
+            border:"1px solid rgba(255,200,0,0.2)",
+            display:"flex", alignItems:"center", gap:"5px",
+          }}>
+            <span style={{ fontSize:"14px" }}>🪙</span>
+            <span style={{ color:"#FFD700", fontSize:"15px", fontWeight:700 }}>{coins}</span>
+          </div>
+        )}
       </div>
     </div>
   );

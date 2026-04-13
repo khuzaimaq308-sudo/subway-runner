@@ -387,11 +387,13 @@ export function Game() {
           />
         </Canvas>
 
-        <HUD score={score} coins={coins} visible={playing || dancing} />
-        <WatchesCornerPanel />
+        <HUD score={score} coins={coins} watches={watches} visible={playing || dancing} />
 
         {gameState === "menu" && (
-          <MenuScreen onStart={startGame} highScore={highScore} />
+          <>
+            <WatchesCornerPanel />
+            <MenuScreen onStart={startGame} highScore={highScore} />
+          </>
         )}
         {gameState === "gameover" && (
           <GameOverScreen score={score} highScore={highScore} coins={coins} onRestart={startGame} onMenu={goToMenu} />
