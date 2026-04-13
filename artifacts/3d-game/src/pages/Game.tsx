@@ -352,7 +352,7 @@ export function Game() {
           body: JSON.stringify({
             email,
             username,
-            watchesCollected: st.watches,
+            watchesCollected: st.coins,   // coins = gold watches picked up during gameplay
             score:            st.score,
             coins:            st.coins,
           }),

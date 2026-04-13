@@ -34,9 +34,12 @@ export function WatchesCornerPanel() {
         }
       } catch {}
     };
+    // Fetch immediately on mount, then again after 2s (catches freshly submitted scores)
+    // and then every 12s
     fetchStats();
-    const id = setInterval(fetchStats, 12000);
-    return () => clearInterval(id);
+    const quick = setTimeout(fetchStats, 2000);
+    const id    = setInterval(fetchStats, 12000);
+    return () => { clearTimeout(quick); clearInterval(id); };
   }, [isLoaded, user]);
 
   if (!isLoaded || !user) return null;

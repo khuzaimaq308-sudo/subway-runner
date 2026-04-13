@@ -54,9 +54,9 @@ export function HUD({ score, coins, watches, visible }: HUDProps) {
         </div>
       )}
 
-      {/* Right side — watches this game + coins */}
+      {/* Right side — watches collected this game */}
       <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
-        {/* This game's watch count */}
+        {/* This game's watch count (coins = regular gold watch pickups) */}
         <div style={{
           background:"rgba(0,0,0,0.65)", backdropFilter:"blur(8px)",
           borderRadius:"14px", padding:"10px 18px",
@@ -66,20 +66,20 @@ export function HUD({ score, coins, watches, visible }: HUDProps) {
           <span style={{ fontSize:"20px" }}>⌚</span>
           <div>
             <div style={{ color:"rgba(255,215,0,0.55)", fontSize:"9px", fontWeight:700, letterSpacing:1.5, lineHeight:1 }}>THIS GAME</div>
-            <div style={{ color:"#FFD700", fontSize:"22px", fontWeight:800, lineHeight:1.1 }}>{watches}</div>
+            <div style={{ color:"#FFD700", fontSize:"22px", fontWeight:800, lineHeight:1.1 }}>{coins}</div>
           </div>
         </div>
 
-        {/* Coins (small chips / regular collectibles) */}
-        {coins > 0 && (
+        {/* BigWatch bonus counter (rare special event) */}
+        {watches > 0 && (
           <div style={{
             background:"rgba(0,0,0,0.5)", backdropFilter:"blur(6px)",
             borderRadius:"10px", padding:"6px 14px",
             border:"1px solid rgba(255,200,0,0.2)",
             display:"flex", alignItems:"center", gap:"5px",
           }}>
-            <span style={{ fontSize:"14px" }}>🪙</span>
-            <span style={{ color:"#FFD700", fontSize:"15px", fontWeight:700 }}>{coins}</span>
+            <span style={{ fontSize:"14px" }}>🌟</span>
+            <span style={{ color:"#FFD700", fontSize:"15px", fontWeight:700 }}>×{watches} BigWatch</span>
           </div>
         )}
       </div>
