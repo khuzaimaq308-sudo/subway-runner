@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { useUser } from "@clerk/react";
+import { useState, useEffect } from "react";
+import { useUser, useAuth } from "@clerk/react";
 
 const ADMIN_EMAIL = "khuzaimaq308@gmail.com";
 
@@ -19,6 +19,12 @@ interface MediaItem {
 }
 
 type TabKey = "players" | "competition" | "media";
+
+/* ── Shared micro-styles ─────────────────────────────────────────── */
+const lbl: React.CSSProperties = { display:"block", color:"rgba(255,255,255,0.45)", fontSize:11, fontWeight:600, letterSpacing:0.5, marginBottom:6 };
+const inp: React.CSSProperties = { width:"100%", padding:"9px 12px", borderRadius:8, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,215,0,0.2)", color:"#fff", fontSize:13, outline:"none", boxSizing:"border-box" };
+const tabBtn: React.CSSProperties = { padding:"8px 16px", borderRadius:8, border:"1px solid", cursor:"pointer", fontSize:12, fontWeight:600, fontFamily:"system-ui", transition:"all 0.15s" };
+const actionBtn: React.CSSProperties = { width:34, height:34, borderRadius:8, cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 };
 
 /* ── Sub-components ─────────────────────────────────────────────── */
 function StatCard({ label, value, icon }: { label: string; value: string | number; icon: string }) {
@@ -90,22 +96,27 @@ function PlayersTab({ users, loading }: { users: UserRow[]; loading: boolean }) 
 
 /* ── Competition tab ─────────────────────────────────────────────── */
 function CompetitionTab() {
-  const [comp, setComp]   = useState<CompetitionData | null>(null);
+  const { getToken } = useAuth();
+  const [comp, setComp]     = useState<CompetitionData | null>(null);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg]     = useState("");
+  const [msg, setMsg]       = useState("");
 
-  // Form state
-  const [name,  setName]   = useState("");
-  const [p1,    setP1]     = useState("");
-  const [p2,    setP2]     = useState("");
-  const [p3,    setP3]     = useState("");
-  const [days,  setDays]   = useState("45");
+  const [name,    setName]    = useState("");
+  const [p1,      setP1]      = useState("");
+  const [p2,      setP2]      = useState("");
+  const [p3,      setP3]      = useState("");
+  const [days,    setDays]    = useState("45");
   const [useDate, setUseDate] = useState(false);
   const [dateVal, setDateVal] = useState("");
 
   useEffect(() => {
-    fetch("/api/admin/competition", { credentials:"include" })
-      .then(r => r.json()).then(j => {
+    (async () => {
+      try {
+        const token = await getToken();
+        const r = await fetch("/api/admin/competition", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const j = await r.json();
         if (j.success && j.data) {
           const d = j.data;
           setComp(d);
@@ -116,7 +127,8 @@ function CompetitionTab() {
           const dLeft = Math.ceil((endD.getTime() - Date.now()) / 86400000);
           setDays(String(Math.max(1, dLeft)));
         }
-      }).catch(()=>{});
+      } catch {}
+    })();
   }, []);
 
   const save = async () => {
@@ -124,22 +136,23 @@ function CompetitionTab() {
     const body: Record<string, unknown> = { competitionName: name, prize1: p1, prize2: p2, prize3: p3 };
     if (useDate) body.endDate = dateVal;
     else body.daysFromNow = Number(days);
-
-    const r = await fetch("/api/admin/competition", {
-      method:"PUT", credentials:"include",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify(body),
-    }).then(r=>r.json());
+    try {
+      const token = await getToken();
+      const r = await fetch("/api/admin/competition", {
+        method:"PUT",
+        headers: { "Content-Type":"application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      }).then(r=>r.json());
+      if (r.success) { setMsg("✅ Competition updated!"); setTimeout(()=>setMsg(""), 3000); }
+      else setMsg("❌ " + r.error);
+    } catch { setMsg("❌ Network error"); }
     setSaving(false);
-    if (r.success) { setMsg("✅ Competition updated!"); setTimeout(()=>setMsg(""), 3000); }
-    else setMsg("❌ " + r.error);
   };
 
   const daysLeft = comp ? Math.ceil((new Date(comp.endDate).getTime() - Date.now()) / 86400000) : null;
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-      {/* Current status */}
       {comp && (
         <div style={{ background:"rgba(255,215,0,0.07)", border:"1px solid rgba(255,215,0,0.2)", borderRadius:14, padding:"18px 22px" }}>
           <div style={{ color:"rgba(255,215,0,0.5)", fontSize:11, letterSpacing:1, marginBottom:8 }}>CURRENT COMPETITION</div>
@@ -162,17 +175,13 @@ function CompetitionTab() {
           </div>
         </div>
       )}
-
-      {/* Edit form */}
       <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:14, padding:"22px 24px" }}>
         <div style={{ color:"rgba(255,215,0,0.6)", fontSize:12, fontWeight:700, letterSpacing:1, marginBottom:18 }}>UPDATE COMPETITION</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-          {/* Name */}
           <div style={{ gridColumn:"1/-1" }}>
             <label style={lbl}>Competition Name</label>
             <input value={name} onChange={e=>setName(e.target.value)} style={inp} placeholder="e.g. Watch Hunt May 2026" />
           </div>
-          {/* Prizes */}
           <div>
             <label style={lbl}>1st Prize (PKR)</label>
             <input value={p1} onChange={e=>setP1(e.target.value)} style={inp} placeholder="10,000" />
@@ -185,12 +194,11 @@ function CompetitionTab() {
             <label style={lbl}>3rd Prize (PKR)</label>
             <input value={p3} onChange={e=>setP3(e.target.value)} style={inp} placeholder="2,000" />
           </div>
-          {/* End date */}
           <div>
             <label style={lbl}>End Date Method</label>
             <div style={{ display:"flex", gap:8, marginTop:4 }}>
               <button onClick={()=>setUseDate(false)} style={{ ...tabBtn, background: !useDate ? "rgba(255,215,0,0.18)" : "rgba(255,255,255,0.05)", borderColor: !useDate ? "rgba(255,215,0,0.6)" : "rgba(255,255,255,0.1)" }}>Days from now</button>
-              <button onClick={()=>setUseDate(true)} style={{ ...tabBtn, background: useDate ? "rgba(255,215,0,0.18)" : "rgba(255,255,255,0.05)", borderColor: useDate ? "rgba(255,215,0,0.6)" : "rgba(255,255,255,0.1)" }}>Specific date</button>
+              <button onClick={()=>setUseDate(true)}  style={{ ...tabBtn, background:  useDate ? "rgba(255,215,0,0.18)" : "rgba(255,255,255,0.05)", borderColor:  useDate ? "rgba(255,215,0,0.6)" : "rgba(255,255,255,0.1)" }}>Specific date</button>
             </div>
           </div>
           <div>
@@ -223,6 +231,7 @@ function CompetitionTab() {
 
 /* ── Media tab ───────────────────────────────────────────────────── */
 function MediaTab() {
+  const { getToken } = useAuth();
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle]     = useState("");
@@ -231,33 +240,47 @@ function MediaTab() {
   const [adding, setAdding]   = useState(false);
   const [msg, setMsg]         = useState("");
 
-  const fetchItems = () => {
-    fetch("/api/admin/media", { credentials:"include" })
-      .then(r=>r.json()).then(j=>{ if(j.success) setItems(j.data); })
-      .catch(()=>{}).finally(()=>setLoading(false));
+  const authFetch = async (path: string, opts: RequestInit = {}) => {
+    const token = await getToken();
+    return fetch(path, {
+      ...opts,
+      headers: { ...(opts.headers ?? {}), Authorization: `Bearer ${token}` },
+    });
   };
-  useEffect(()=>{ fetchItems(); }, []);
+
+  const fetchItems = async () => {
+    try {
+      const r = await authFetch("/api/admin/media");
+      const j = await r.json();
+      if (j.success) setItems(j.data);
+    } catch {} finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchItems(); }, []);
 
   const addItem = async () => {
     if (!title.trim() || !url.trim()) { setMsg("❌ Title and URL are required"); return; }
     setAdding(true); setMsg("");
-    const r = await fetch("/api/admin/media", {
-      method:"POST", credentials:"include",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ title, mediaType: type, url }),
-    }).then(r=>r.json());
+    try {
+      const r = await authFetch("/api/admin/media", {
+        method:"POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ title, mediaType: type, url }),
+      });
+      const j = await r.json();
+      if (j.success) { setTitle(""); setUrl(""); setMsg("✅ Added!"); fetchItems(); setTimeout(()=>setMsg(""),2500); }
+      else setMsg("❌ " + j.error);
+    } catch { setMsg("❌ Network error"); }
     setAdding(false);
-    if (r.success) { setTitle(""); setUrl(""); setMsg("✅ Added!"); fetchItems(); setTimeout(()=>setMsg(""),2500); }
-    else setMsg("❌ " + r.error);
   };
 
   const deleteItem = async (id: number) => {
-    await fetch(`/api/admin/media/${id}`, { method:"DELETE", credentials:"include" });
+    await authFetch(`/api/admin/media/${id}`, { method:"DELETE" });
     setItems(prev => prev.filter(i => i.id !== id));
   };
 
   const toggleItem = async (id: number) => {
-    await fetch(`/api/admin/media/${id}/toggle`, { method:"PATCH", credentials:"include" });
+    await authFetch(`/api/admin/media/${id}/toggle`, { method:"PATCH" });
     fetchItems();
   };
 
@@ -265,7 +288,6 @@ function MediaTab() {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-      {/* Add form */}
       <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:14, padding:"22px 24px" }}>
         <div style={{ color:"rgba(255,215,0,0.6)", fontSize:12, fontWeight:700, letterSpacing:1, marginBottom:18 }}>ADD MEDIA / ANNOUNCEMENT</div>
         <div style={{ display:"flex", gap:12, marginBottom:14 }}>
@@ -287,7 +309,8 @@ function MediaTab() {
           </div>
           <div>
             <label style={lbl}>{type==="link" ? "URL / Link" : type==="video" ? "Video URL (mp4, YouTube, etc.)" : "Image URL"}</label>
-            <input value={url} onChange={e=>setUrl(e.target.value)} style={inp} placeholder={type==="image" ? "https://example.com/image.jpg" : type==="video" ? "https://example.com/video.mp4" : "https://example.com"} />
+            <input value={url} onChange={e=>setUrl(e.target.value)} style={inp}
+              placeholder={type==="image" ? "https://example.com/image.jpg" : type==="video" ? "https://example.com/video.mp4" : "https://example.com"} />
           </div>
         </div>
         {msg && <div style={{ marginTop:10, padding:"7px 12px", borderRadius:7, background: msg.startsWith("✅") ? "rgba(80,200,80,0.1)" : "rgba(255,80,80,0.1)", color: msg.startsWith("✅") ? "#88FF88" : "#FF8888", fontSize:13 }}>{msg}</div>}
@@ -300,7 +323,6 @@ function MediaTab() {
         </button>
       </div>
 
-      {/* Items list */}
       <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:14, overflow:"hidden" }}>
         <div style={{ padding:"14px 20px", borderBottom:"1px solid rgba(255,215,0,0.1)", color:"#FFD700", fontWeight:700, fontSize:14 }}>
           Media Library ({items.length})
@@ -308,7 +330,7 @@ function MediaTab() {
         {loading ? <div style={{ padding:30, textAlign:"center", color:"rgba(255,255,255,0.3)" }}>Loading…</div>
           : items.length===0 ? <div style={{ padding:30, textAlign:"center", color:"rgba(255,255,255,0.3)" }}>No media yet. Add something above.</div>
           : (
-          <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
+          <div style={{ display:"flex", flexDirection:"column" }}>
             {items.map((item)=>(
               <div key={item.id} style={{
                 display:"flex", alignItems:"center", gap:12,
@@ -325,11 +347,9 @@ function MediaTab() {
                     {new Date(item.createdAt).toLocaleDateString()} · {item.mediaType}
                   </div>
                 </div>
-                {/* Preview */}
                 {item.mediaType==="image" && (
                   <img src={item.url} alt={item.title} style={{ width:56, height:40, objectFit:"cover", borderRadius:6, border:"1px solid rgba(255,255,255,0.1)" }} onError={e=>((e.target as HTMLImageElement).style.display="none")} />
                 )}
-                {/* Toggle / Delete */}
                 <button onClick={()=>toggleItem(item.id)} title={item.isActive ? "Deactivate" : "Activate"} style={{ ...actionBtn, background: item.isActive ? "rgba(255,215,0,0.1)" : "rgba(80,200,80,0.1)", border: `1px solid ${item.isActive ? "rgba(255,215,0,0.3)" : "rgba(80,200,80,0.3)"}` }}>
                   {item.isActive ? "⏸" : "▶"}
                 </button>
@@ -345,17 +365,12 @@ function MediaTab() {
   );
 }
 
-/* ── Shared micro-styles ─────────────────────────────────────────── */
-const lbl: React.CSSProperties = { display:"block", color:"rgba(255,255,255,0.45)", fontSize:11, fontWeight:600, letterSpacing:0.5, marginBottom:6 };
-const inp: React.CSSProperties = { width:"100%", padding:"9px 12px", borderRadius:8, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,215,0,0.2)", color:"#fff", fontSize:13, outline:"none", boxSizing:"border-box" };
-const tabBtn: React.CSSProperties = { padding:"8px 16px", borderRadius:8, border:"1px solid", cursor:"pointer", fontSize:12, fontWeight:600, fontFamily:"system-ui", transition:"all 0.15s" };
-const actionBtn: React.CSSProperties = { width:34, height:34, borderRadius:8, cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 };
-
 /* ── Main AdminPanel ─────────────────────────────────────────────── */
 export function AdminPanel() {
   const { user, isLoaded } = useUser();
+  const { getToken }       = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>("players");
-  const [users, setUsers]   = useState<UserRow[]>([]);
+  const [users, setUsers]         = useState<UserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
   const detectedEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase().trim() ?? "";
@@ -367,9 +382,16 @@ export function AdminPanel() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    fetch("/api/admin/users", { credentials:"include" })
-      .then(r=>r.json()).then(j=>{ if(j.success) setUsers(j.data); })
-      .catch(()=>{}).finally(()=>setLoadingUsers(false));
+    (async () => {
+      try {
+        const token = await getToken();
+        const r = await fetch("/api/admin/users", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const j = await r.json();
+        if (j.success) setUsers(j.data);
+      } catch {} finally { setLoadingUsers(false); }
+    })();
   }, [isAdmin]);
 
   if (!isLoaded) return (
@@ -409,7 +431,6 @@ export function AdminPanel() {
 
   return (
     <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#060614 0%,#100820 50%,#060e1e 100%)", fontFamily:"system-ui,sans-serif", color:"#fff", padding:"32px 40px" }}>
-      {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
           <div style={{ fontSize:36 }}>⌚</div>
@@ -421,7 +442,6 @@ export function AdminPanel() {
         <a href="/" style={{ padding:"8px 20px", borderRadius:8, background:"rgba(255,215,0,0.1)", border:"1px solid rgba(255,215,0,0.3)", color:"#FFD700", textDecoration:"none", fontSize:13, fontWeight:600 }}>← Back to Game</a>
       </div>
 
-      {/* Tabs */}
       <div style={{ display:"flex", gap:8, marginBottom:24 }}>
         {tabs.map(t=>(
           <button key={t.key} onClick={()=>setActiveTab(t.key)} style={{
@@ -436,7 +456,6 @@ export function AdminPanel() {
         ))}
       </div>
 
-      {/* Tab content */}
       {activeTab==="players"     && <PlayersTab users={users} loading={loadingUsers} />}
       {activeTab==="competition" && <CompetitionTab />}
       {activeTab==="media"       && <MediaTab />}

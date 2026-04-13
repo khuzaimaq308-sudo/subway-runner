@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useUser } from "@clerk/react";
+import { useUser, useAuth } from "@clerk/react";
 
 interface UserStats {
   totalWatches: number;
@@ -9,27 +9,30 @@ interface UserStats {
 
 export function WatchesCornerPanel() {
   const { user, isLoaded } = useUser();
-  const [stats, setStats] = useState<UserStats | null>(null);
-  const [pop, setPop]     = useState(false);
-  const prevWatches = useRef<number | null>(null);
+  const { getToken }       = useAuth();
+  const [stats, setStats]  = useState<UserStats | null>(null);
+  const [pop, setPop]      = useState(false);
+  const prevWatches        = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isLoaded || !user) return;
-    const fetchStats = () => {
-      fetch("/api/user/stats", { credentials: "include" })
-        .then(r => r.json())
-        .then(j => {
-          if (j.success && j.data) {
-            const w = j.data.totalWatches ?? 0;
-            if (prevWatches.current !== null && w > prevWatches.current) {
-              setPop(true);
-              setTimeout(() => setPop(false), 600);
-            }
-            prevWatches.current = w;
-            setStats({ totalWatches: w, totalScore: j.data.totalScore ?? 0, gamesPlayed: j.data.gamesPlayed ?? 0 });
+    const fetchStats = async () => {
+      try {
+        const token = await getToken();
+        const r = await fetch("/api/user/stats", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const j = await r.json();
+        if (j.success && j.data) {
+          const w = j.data.totalWatches ?? 0;
+          if (prevWatches.current !== null && w > prevWatches.current) {
+            setPop(true);
+            setTimeout(() => setPop(false), 600);
           }
-        })
-        .catch(() => {});
+          prevWatches.current = w;
+          setStats({ totalWatches: w, totalScore: j.data.totalScore ?? 0, gamesPlayed: j.data.gamesPlayed ?? 0 });
+        }
+      } catch {}
     };
     fetchStats();
     const id = setInterval(fetchStats, 12000);

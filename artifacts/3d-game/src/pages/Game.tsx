@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { useUser } from "@clerk/react";
+import { useUser, useAuth } from "@clerk/react";
 import { useGameStore, Lane } from "@/game/useGameStore";
 import { useSound, startHipHopBeat, stopHipHopBeat } from "@/game/useSound";
 import { useInput } from "@/game/useInput";
@@ -235,6 +235,7 @@ export function Game() {
     useGameStore();
   const { play: playSound } = useSound();
   const { user } = useUser();
+  const { getToken } = useAuth();
 
   const [isJumping, setIsJumping]   = useState(false);
   const [isSliding, setIsSliding]   = useState(false);
@@ -339,17 +340,25 @@ export function Game() {
     const st = useGameStore.getState();
     const email    = user.primaryEmailAddress?.emailAddress ?? "";
     const username = user.fullName || user.username || email.split("@")[0] || "Player";
-    fetch("/api/leaderboard/score", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        username,
-        watchesCollected: st.watches,
-        score:            st.score,
-        coins:            st.coins,
-      }),
-    }).catch(() => {}); // silent on network error
+    (async () => {
+      try {
+        const token = await getToken();
+        await fetch("/api/leaderboard/score", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            email,
+            username,
+            watchesCollected: st.watches,
+            score:            st.score,
+            coins:            st.coins,
+          }),
+        });
+      } catch {}
+    })();
   }, [gameState, user]);
 
   // Speed ramp
