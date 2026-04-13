@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react";
+import { useUser } from "@clerk/react";
 import { DancingCharacterView } from "./DancingCharacterView";
 import { LeaderboardPanel } from "./LeaderboardPanel";
+
+const ADMIN_EMAIL = "khuzaimaq308@gmail.com";
 
 interface MenuScreenProps {
   onStart:    () => void;
@@ -185,6 +188,9 @@ function IconBtn({ label, icon, onClick }: { label: string; icon: React.ReactNod
 /* ── Main menu ───────────────────────────────────────────────────── */
 export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
   const [soundOn, setSoundOn] = useState(true);
+  const { user } = useUser();
+  const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase().trim() ?? "";
+  const isAdmin   = userEmail === ADMIN_EMAIL.toLowerCase();
 
   const handleSound = () => {
     setSoundOn((v) => !v);
@@ -224,8 +230,8 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
           <DancingCharacterView />
         </div>
 
-        {/* ── Center: Controls ── */}
-        <div style={{ flex:"0 0 38%", display:"flex", flexDirection:"column", alignItems:"center", gap:28, padding:"0 16px" }}>
+        {/* ── Right: Controls ── */}
+        <div style={{ flex:"0 0 52%", display:"flex", flexDirection:"column", alignItems:"center", gap:26, paddingRight:"4%" }}>
 
           {/* Title */}
           <div style={{ textAlign:"center" }}>
@@ -238,7 +244,7 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
               <span style={{ color:"#FFD700" }}>RUNNER</span>
             </div>
             {highScore > 0 && (
-              <div style={{ marginTop:12, display:"inline-flex", alignItems:"center", gap:8, background:"rgba(255,215,0,0.10)", border:"1px solid rgba(255,215,0,0.25)", borderRadius:50, padding:"6px 18px" }}>
+              <div style={{ marginTop:10, display:"inline-flex", alignItems:"center", gap:8, background:"rgba(255,215,0,0.10)", border:"1px solid rgba(255,215,0,0.25)", borderRadius:50, padding:"6px 18px" }}>
                 <span style={{ fontSize:16 }}>🏆</span>
                 <span style={{ color:"#FFD700", fontSize:14, fontWeight:700 }}>Best: {highScore.toLocaleString()}</span>
               </div>
@@ -248,8 +254,11 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
           {/* Big watch play button */}
           <WatchPlayButton onStart={onStart} />
 
-          {/* Sub buttons */}
-          <div style={{ display:"flex", gap:14 }}>
+          {/* RANKS button */}
+          <LeaderboardPanel />
+
+          {/* Sub icon buttons */}
+          <div style={{ display:"flex", gap:12 }}>
             <IconBtn
               label="Home"
               icon="🏠"
@@ -260,12 +269,14 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
               icon={soundOn ? "🔊" : "🔇"}
               onClick={handleSound}
             />
+            {isAdmin && (
+              <IconBtn
+                label="Admin"
+                icon="⚙️"
+                onClick={() => { window.location.href = "/admin"; }}
+              />
+            )}
           </div>
-        </div>
-
-        {/* ── Right: Leaderboard ── */}
-        <div style={{ flex:"0 0 32%", display:"flex", justifyContent:"center", alignItems:"center", padding:"0 8px" }}>
-          <LeaderboardPanel />
         </div>
       </div>
 
