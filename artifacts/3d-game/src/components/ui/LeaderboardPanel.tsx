@@ -17,12 +17,12 @@ const PRIZES: Record<number, { pkr: string; color: string; medal: string; glow: 
   3: { pkr: "2,000",  color: "#E8A070", medal: "🥉", glow: "#CD7F32", label: "3rd Place" },
 };
 
-function getMonthLabel() {
-  const now  = new Date();
-  const end  = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const days = end.getDate() - now.getDate();
-  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  return { month: months[now.getMonth()], year: now.getFullYear(), daysLeft: days };
+interface CompetitionInfo {
+  competitionName: string;
+  endDate: string;
+  prize1: string;
+  prize2: string;
+  prize3: string;
 }
 
 /* ─── Animated glowing box for top-3 ──────────────────────────────────── */
@@ -172,7 +172,10 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
   const [entries, setEntries]   = useState<LeaderEntry[]>([]);
   const [loading, setLoading]   = useState(true);
   const [lastUpd, setLastUpd]   = useState<Date | null>(null);
-  const { month, year, daysLeft } = getMonthLabel();
+  const [comp, setComp]         = useState<CompetitionInfo | null>(null);
+
+  const daysLeft = comp ? Math.ceil((new Date(comp.endDate).getTime() - Date.now()) / 86400000) : null;
+  const compName = comp?.competitionName ?? "Watch Hunt";
 
   const fetchData = () => {
     fetch("/api/leaderboard")
@@ -184,6 +187,7 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     fetchData();
+    fetch("/api/competition").then(r=>r.json()).then(j=>{ if(j.success && j.data) setComp(j.data); }).catch(()=>{});
     const id = setInterval(fetchData, 8000);
     return () => clearInterval(id);
   }, []);
@@ -244,10 +248,12 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
               <span style={{ fontSize: 28, filter: "drop-shadow(0 0 10px #FFD700)" }}>⌚</span>
               <div>
                 <div style={{ color: "#FFD700", fontWeight: 900, fontSize: 18, letterSpacing: 1 }}>
-                  WATCH HUNT RANKINGS
+                  {compName.toUpperCase()}
                 </div>
                 <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 1 }}>
-                  {month} {year} Event · {daysLeft > 0 ? `${daysLeft} days left` : "Last day!"} · Top 20 players
+                  {daysLeft !== null
+                    ? daysLeft > 0 ? `${daysLeft} days remaining · Top 20 players` : "Competition ended!"
+                    : "Top 20 players"}
                 </div>
               </div>
             </div>
@@ -275,9 +281,9 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
             borderBottom: "1px solid rgba(255,215,0,0.1)",
           }}>
             {[
-              { pos: "1st", amt: "₨10,000", col: "#FFD700", bg: "rgba(255,215,0,0.08)" },
-              { pos: "2nd", amt: "₨5,000",  col: "#C0C0C0", bg: "rgba(192,192,192,0.05)" },
-              { pos: "3rd", amt: "₨2,000",  col: "#CD7F32", bg: "rgba(205,127,50,0.06)" },
+              { pos: "1st", amt: `₨${comp?.prize1 ?? "10,000"}`, col: "#FFD700", bg: "rgba(255,215,0,0.08)" },
+              { pos: "2nd", amt: `₨${comp?.prize2 ?? "5,000"}`,  col: "#C0C0C0", bg: "rgba(192,192,192,0.05)" },
+              { pos: "3rd", amt: `₨${comp?.prize3 ?? "2,000"}`,  col: "#CD7F32", bg: "rgba(205,127,50,0.06)" },
             ].map(({ pos, amt, col, bg }) => (
               <div key={pos} style={{ flex: 1, textAlign: "center", padding: "8px 0", background: bg, borderRight: "1px solid rgba(255,215,0,0.06)" }}>
                 <div style={{ color: `${col}88`, fontSize: 10, fontWeight: 600 }}>{pos} PLACE</div>

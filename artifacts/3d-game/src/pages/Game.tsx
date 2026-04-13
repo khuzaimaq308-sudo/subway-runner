@@ -16,6 +16,7 @@ import { Powerups } from "@/components/game/Powerups";
 import { HUD } from "@/components/ui/HUD";
 import { MenuScreen } from "@/components/ui/MenuScreen";
 import { GameOverScreen } from "@/components/ui/GameOverScreen";
+import { WatchesCornerPanel } from "@/components/ui/WatchesCornerPanel";
 
 // ── Camera ────────────────────────────────────────────────────────────────
 function CameraRig({ isJumping, speed, isDancing, isOnTrain, isJetpack }: { isJumping: boolean; speed: number; isDancing: boolean; isOnTrain: boolean; isJetpack: boolean }) {
@@ -387,6 +388,7 @@ export function Game() {
         </Canvas>
 
         <HUD score={score} coins={coins} visible={playing || dancing} />
+        <WatchesCornerPanel />
 
         {gameState === "menu" && (
           <MenuScreen onStart={startGame} highScore={highScore} />
