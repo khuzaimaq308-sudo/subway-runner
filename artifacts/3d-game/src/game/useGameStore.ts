@@ -13,6 +13,7 @@ interface GameStore {
   lane: Lane;
   lives: number;
   coins: number;
+  watches: number;           // big watches collected this game
   powerup: Powerup;
   powerupTime: number;
   onTrain: boolean;
@@ -23,6 +24,7 @@ interface GameStore {
   goToMenu: () => void;
   addScore: (n: number) => void;
   addCoin: () => void;
+  addWatch: () => void;
   setLane: (l: Lane) => void;
   setSpeed: (s: number) => void;
   loseLife: () => void;
@@ -42,12 +44,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lane: 0,
   lives: 1,
   coins: 0,
+  watches: 0,
   powerup: null,
   powerupTime: 0,
   onTrain: false,
 
   startGame: () =>
-    set({ gameState: "playing", score: 0, speed: 11, lane: 0, lives: 1, coins: 0, powerup: null, powerupTime: 0, onTrain: false }),
+    set({ gameState: "playing", score: 0, speed: 11, lane: 0, lives: 1, coins: 0, watches: 0, powerup: null, powerupTime: 0, onTrain: false }),
 
   startDying: () => {
     const { score, highScore } = get();
@@ -61,6 +64,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   addScore: (n) => set((s) => ({ score: s.score + n })),
 
   addCoin: () => set((s) => ({ coins: s.coins + 1, score: s.score + 10 })),
+
+  addWatch: () => set((s) => ({ watches: s.watches + 1 })),
 
   setLane: (lane) => set({ lane }),
 

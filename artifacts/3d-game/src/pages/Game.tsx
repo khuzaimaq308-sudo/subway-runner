@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import { useUser } from "@clerk/react";
 import { useGameStore, Lane } from "@/game/useGameStore";
 import { useSound, startHipHopBeat, stopHipHopBeat } from "@/game/useSound";
 import { useInput } from "@/game/useInput";
@@ -229,9 +230,10 @@ function FootstepLoop({ isJumping, isSliding, onStep }: { isJumping: boolean; is
 
 // ── Root component ────────────────────────────────────────────────────────
 export function Game() {
-  const { gameState, score, highScore, coins, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance, endGame, setOnTrain } =
+  const { gameState, score, highScore, coins, watches, speed, lane, startGame, goToMenu, setSpeed, startDance, endDance, endGame, setOnTrain, addWatch } =
     useGameStore();
   const { play: playSound } = useSound();
+  const { user } = useUser();
 
   const [isJumping, setIsJumping]   = useState(false);
   const [isSliding, setIsSliding]   = useState(false);
@@ -288,6 +290,7 @@ export function Game() {
   const handleBigWatch = useCallback(() => {
     playSound("coin");
     useGameStore.getState().addScore(200);
+    useGameStore.getState().addWatch();
     startDance();
     startHipHopBeat();
   }, [playSound, startDance]);
@@ -327,6 +330,26 @@ export function Game() {
       if (dyingTimerRef.current) { clearTimeout(dyingTimerRef.current); dyingTimerRef.current = null; }
     };
   }, [dying, endGame]);
+
+  // Submit score to leaderboard when game ends
+  useEffect(() => {
+    if (gameState !== "gameover") return;
+    if (!user) return;
+    const st = useGameStore.getState();
+    const email    = user.primaryEmailAddress?.emailAddress ?? "";
+    const username = user.fullName || user.username || email.split("@")[0] || "Player";
+    fetch("/api/leaderboard/score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        username,
+        watchesCollected: st.watches,
+        score:            st.score,
+        coins:            st.coins,
+      }),
+    }).catch(() => {}); // silent on network error
+  }, [gameState, user]);
 
   // Speed ramp
   useEffect(() => {

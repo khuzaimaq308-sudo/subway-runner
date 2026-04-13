@@ -21,9 +21,23 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ### 3d-game (Subway Runner)
 - **Path**: `artifacts/3d-game/`
 - **Preview**: `/` (root)
-- **Tech**: React + Vite + React Three Fiber + Three.js + Zustand
-- **Description**: A 3D endless runner game inspired by Subway Surfers with a custom character, voice reactions, coins, obstacles, and score tracking. Features 3 lanes, jump mechanics, increasing speed, and browser-based speech synthesis for voice feedback.
+- **Tech**: React + Vite + React Three Fiber + Three.js + Zustand + Clerk Auth
+- **Description**: A 3D endless runner game inspired by Subway Surfers with Clerk Google OAuth auth, custom character, voice reactions, coins, obstacles, ramp trains, jetpack/magnet powerups, police chaser, and score tracking. Features 3 lanes, jump mechanics, increasing speed, and browser-based speech synthesis for voice feedback.
 - **Game controls**: Arrow keys / WASD / swipe to switch lanes and jump
+- **Big golden watch**: Spawns every 2–2.5 minutes (randomised), triggers dance + hip-hop music
+- **Admin panel**: `/admin` route — only accessible to `khuzaimaq308@gmail.com`
+- **Leaderboard**: Real-time panel on home screen, polls `/api/leaderboard` every 8s; tracks total watches collected across all games; monthly prize event (₨10K/5K/2K)
+- **Score submission**: After each game, watch count + score + coins are submitted to `/api/leaderboard/score` (upserts cumulative totals)
+
+### api-server (API Server)
+- **Path**: `artifacts/api-server/`
+- **Preview**: `/api`
+- **Tech**: Express 5 + Drizzle ORM + Clerk middleware
+- **Routes**: `GET /api/leaderboard`, `POST /api/leaderboard/score`, `GET /api/admin/users`
+
+### Database
+- **Table**: `leaderboard` — stores per-user cumulative watch, score, coin, and game counts
+- **Schema**: `lib/db/src/schema/leaderboard.ts`
 
 ## Key Commands
 

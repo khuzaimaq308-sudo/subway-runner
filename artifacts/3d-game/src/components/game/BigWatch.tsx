@@ -17,7 +17,9 @@ const LANE_X         = [-2.5, 0, 2.5];
 const SPAWN_Z        = -70;
 const DESPAWN_Z      = 8;
 const PLAYER_Z       = 0;
-const SPAWN_INTERVAL = 30;  // seconds
+// Between 2 min and 2.5 min — randomised each spawn
+const SPAWN_INTERVAL_MIN = 120;
+const SPAWN_INTERVAL_MAX = 150;
 const WATCH_Y        = 1.2;
 const WATCH_SCALE    = 3.2;
 const SPAWN_LANE     = 1;    // always centre
@@ -93,7 +95,7 @@ export function BigWatch({ speed, playing, playerLane, onCollect }: BigWatchProp
   const watchRef     = useRef<THREE.Group | null>(null);
   const activeRef    = useRef(false);
   const watchZRef    = useRef(SPAWN_Z);
-  const timerRef     = useRef(SPAWN_INTERVAL);
+  const timerRef     = useRef(SPAWN_INTERVAL_MIN);
   const timeRef      = useRef(0);
   const onCollectRef = useRef(onCollect);
   const speedRef     = useRef(speed);
@@ -109,7 +111,7 @@ export function BigWatch({ speed, playing, playerLane, onCollect }: BigWatchProp
     const g = groupRef.current;
     if (watchRef.current) { g.remove(watchRef.current); watchRef.current = null; }
     activeRef.current = false;
-    timerRef.current  = SPAWN_INTERVAL;
+    timerRef.current  = SPAWN_INTERVAL_MIN;
     timeRef.current   = 0;
   }, [playing]);
 
@@ -118,9 +120,9 @@ export function BigWatch({ speed, playing, playerLane, onCollect }: BigWatchProp
     timeRef.current  += delta;
     timerRef.current -= delta;
 
-    // Spawn when timer fires
+    // Spawn when timer fires — randomise next interval between 2–2.5 min
     if (timerRef.current <= 0 && !activeRef.current) {
-      timerRef.current = SPAWN_INTERVAL;
+      timerRef.current = SPAWN_INTERVAL_MIN + Math.random() * (SPAWN_INTERVAL_MAX - SPAWN_INTERVAL_MIN);
       const watch = makeBigWatch();
       watch.position.set(LANE_X[SPAWN_LANE], WATCH_Y, SPAWN_Z);
       groupRef.current.add(watch);

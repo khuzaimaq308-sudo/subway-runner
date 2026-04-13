@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { DancingCharacterView } from "./DancingCharacterView";
+import { LeaderboardPanel } from "./LeaderboardPanel";
 
 interface MenuScreenProps {
   onStart:    () => void;
@@ -213,18 +214,18 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
         position:"relative", zIndex:2,
         width:"100%", height:"100%",
         display:"flex", alignItems:"center", justifyContent:"center",
-        gap:0,
+        gap:0, padding:"0 16px",
       }}>
 
         {/* ── Left: Dancing character ── */}
-        <div style={{ flex:"0 0 38%", height:"100%", position:"relative" }}>
+        <div style={{ flex:"0 0 30%", height:"100%", position:"relative", minWidth:0 }}>
           {/* Spotlight underneath character */}
           <div style={{ position:"absolute", bottom:"18%", left:"50%", transform:"translateX(-50%)", width:180, height:40, borderRadius:"50%", background:"rgba(255,215,0,0.10)", filter:"blur(12px)", zIndex:1, pointerEvents:"none" }} />
           <DancingCharacterView />
         </div>
 
-        {/* ── Right: Controls ── */}
-        <div style={{ flex:"0 0 52%", display:"flex", flexDirection:"column", alignItems:"center", gap:32, paddingRight:"5%" }}>
+        {/* ── Center: Controls ── */}
+        <div style={{ flex:"0 0 38%", display:"flex", flexDirection:"column", alignItems:"center", gap:28, padding:"0 16px" }}>
 
           {/* Title */}
           <div style={{ textAlign:"center" }}>
@@ -260,6 +261,11 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
               onClick={handleSound}
             />
           </div>
+        </div>
+
+        {/* ── Right: Leaderboard ── */}
+        <div style={{ flex:"0 0 32%", display:"flex", justifyContent:"center", alignItems:"center", padding:"0 8px" }}>
+          <LeaderboardPanel />
         </div>
       </div>
 
