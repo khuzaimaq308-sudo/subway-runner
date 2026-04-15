@@ -10,6 +10,17 @@ interface MenuScreenProps {
   highScore:  number;
 }
 
+function useWindowSize() {
+  const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const update = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => { window.removeEventListener("resize", update); window.removeEventListener("orientationchange", update); };
+  }, []);
+  return size;
+}
+
 /* ── Animated particle background ────────────────────────────────── */
 function BgCanvas() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -39,7 +50,6 @@ function BgCanvas() {
       bg.addColorStop(1,   "#060e1e");
       ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
-      /* perspective rails */
       ry = (ry + 0.6) % H;
       ctx.save(); ctx.globalAlpha = 0.14;
       for (const [rx, col] of [
@@ -51,7 +61,6 @@ function BgCanvas() {
       }
       ctx.setLineDash([]); ctx.restore();
 
-      /* glow dots */
       for (const p of pts) {
         p.y -= p.vy; if (p.y < -0.02) p.y = 1.02;
         const px = p.x * W, py = p.y * H;
@@ -70,22 +79,23 @@ function BgCanvas() {
 }
 
 /* ── Watch-style play button ─────────────────────────────────────── */
-function WatchPlayButton({ onStart }: { onStart: () => void }) {
+function WatchPlayButton({ onStart, size: btnSize }: { onStart: () => void; size: number }) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
-  const size = 188;
-  const pulse = hovered ? "0 0 0 12px rgba(255,215,0,0.12), 0 0 60px rgba(255,215,0,0.45), 0 0 100px rgba(255,100,50,0.25)" : "0 0 0 8px rgba(255,215,0,0.08), 0 0 40px rgba(255,215,0,0.28), 0 0 70px rgba(255,100,50,0.15)";
+  const size = btnSize;
+  const pulse = hovered
+    ? "0 0 0 12px rgba(255,215,0,0.12), 0 0 60px rgba(255,215,0,0.45), 0 0 100px rgba(255,100,50,0.25)"
+    : "0 0 0 8px rgba(255,215,0,0.08), 0 0 40px rgba(255,215,0,0.28), 0 0 70px rgba(255,100,50,0.15)";
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-      {/* Crown lug */}
-      <div style={{ width:22, height:12, borderRadius:"4px 4px 0 0", background:"linear-gradient(180deg,#C8A000,#9A7800)", boxShadow:"0 -2px 8px rgba(0,0,0,0.4)" }} />
-
-      {/* Main watch bezel */}
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap: Math.round(size * 0.04) }}>
+      <div style={{ width: Math.round(size*0.12), height: Math.round(size*0.065), borderRadius:"4px 4px 0 0", background:"linear-gradient(180deg,#C8A000,#9A7800)", boxShadow:"0 -2px 8px rgba(0,0,0,0.4)" }} />
       <button
         onClick={() => { setPressed(true); setTimeout(() => { setPressed(false); onStart(); }, 140); }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        onTouchStart={() => setHovered(true)}
+        onTouchEnd={() => setHovered(false)}
         style={{
           position:"relative", width:size, height:size,
           borderRadius:"50%", border:"none",
@@ -93,94 +103,83 @@ function WatchPlayButton({ onStart }: { onStart: () => void }) {
           cursor:"pointer", outline:"none", padding:0,
           transform: pressed ? "scale(0.94)" : hovered ? "scale(1.04)" : "scale(1)",
           transition:"transform 0.12s ease, box-shadow 0.22s ease",
-          boxShadow: `0 0 0 5px #B8920A, 0 0 0 9px #8A6A00, ${pulse}`,
+          boxShadow: `0 0 0 ${Math.round(size*0.027)}px #B8920A, 0 0 0 ${Math.round(size*0.049)}px #8A6A00, ${pulse}`,
+          WebkitTapHighlightColor: "transparent",
         }}
       >
-        {/* Watch face */}
         <div style={{
-          position:"absolute", inset:9, borderRadius:"50%",
+          position:"absolute", inset: Math.round(size*0.05), borderRadius:"50%",
           background:"radial-gradient(circle at 38% 35%, #1a1a3a, #07071a 70%)",
           overflow:"hidden",
         }}>
-          {/* Tick marks */}
           {Array.from({ length: 12 }, (_, i) => {
             const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
-            const r = (size / 2 - 14) * 0.78;
-            const cx = (size - 18) / 2, cy = (size - 18) / 2;
+            const r = (size / 2 - size*0.077) * 0.78;
+            const cx = (size - size*0.1) / 2, cy = (size - size*0.1) / 2;
             const x1 = cx + Math.cos(angle) * r, y1 = cy + Math.sin(angle) * r;
-            const x2 = cx + Math.cos(angle) * (r - (i % 3 === 0 ? 9 : 5));
-            const y2 = cy + Math.sin(angle) * (r - (i % 3 === 0 ? 9 : 5));
+            const x2 = cx + Math.cos(angle) * (r - (i % 3 === 0 ? size*0.049 : size*0.027));
+            const y2 = cy + Math.sin(angle) * (r - (i % 3 === 0 ? size*0.049 : size*0.027));
             return (
-              <svg key={i} style={{ position:"absolute", inset:0 }} width={size-18} height={size-18}>
+              <svg key={i} style={{ position:"absolute", inset:0 }} width={size-size*0.1} height={size-size*0.1}>
                 <line x1={x1} y1={y1} x2={x2} y2={y2}
                   stroke={i % 3 === 0 ? "#FFD700" : "rgba(255,215,0,0.35)"}
                   strokeWidth={i % 3 === 0 ? 2.2 : 1.2} strokeLinecap="round" />
               </svg>
             );
           })}
-
-          {/* Centre glow */}
           <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"radial-gradient(circle at 38% 35%, rgba(255,215,0,0.06), transparent 65%)" }} />
-
-          {/* Play triangle */}
           <div style={{
             position:"absolute", top:"50%", left:"50%",
             transform:"translate(-42%, -50%)",
             width:0, height:0,
-            borderTop:"20px solid transparent",
-            borderBottom:"20px solid transparent",
-            borderLeft:`32px solid ${hovered ? "#FFD700" : "#E8B800"}`,
+            borderTop:`${Math.round(size*0.107)}px solid transparent`,
+            borderBottom:`${Math.round(size*0.107)}px solid transparent`,
+            borderLeft:`${Math.round(size*0.171)}px solid ${hovered ? "#FFD700" : "#E8B800"}`,
             filter:`drop-shadow(0 0 ${hovered ? 14 : 8}px rgba(255,215,0,0.9))`,
             transition:"border-left-color 0.2s, filter 0.2s",
           }} />
-
-          {/* Label */}
           <div style={{
-            position:"absolute", bottom:16, left:"50%", transform:"translateX(-50%)",
-            color:"rgba(255,215,0,0.65)", fontSize:9, fontWeight:700,
+            position:"absolute", bottom: Math.round(size*0.086), left:"50%", transform:"translateX(-50%)",
+            color:"rgba(255,215,0,0.65)", fontSize: Math.max(7, Math.round(size*0.049)), fontWeight:700,
             letterSpacing:2.5, fontFamily:"monospace", whiteSpace:"nowrap",
           }}>
             PLAY
           </div>
-
-          {/* Crown crystal glint */}
-          <div style={{ position:"absolute", top:6, left:"50%", transform:"translateX(-50%)", width:24, height:3, borderRadius:4, background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.18),transparent)" }} />
+          <div style={{ position:"absolute", top: Math.round(size*0.033), left:"50%", transform:"translateX(-50%)", width: Math.round(size*0.13), height:3, borderRadius:4, background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.18),transparent)" }} />
         </div>
-
-        {/* Glint overlay */}
-        <div style={{ position:"absolute", inset:9, borderRadius:"50%", background:"linear-gradient(135deg, rgba(255,255,255,0.07) 0%, transparent 55%)", pointerEvents:"none" }} />
+        <div style={{ position:"absolute", inset: Math.round(size*0.05), borderRadius:"50%", background:"linear-gradient(135deg, rgba(255,255,255,0.07) 0%, transparent 55%)", pointerEvents:"none" }} />
       </button>
-
-      {/* Lug bottom */}
-      <div style={{ width:22, height:12, borderRadius:"0 0 4px 4px", background:"linear-gradient(180deg,#9A7800,#C8A000)", boxShadow:"0 2px 8px rgba(0,0,0,0.4)" }} />
-      {/* Strap bottom */}
-      <div style={{ width:36, height:40, borderRadius:"0 0 8px 8px", background:"linear-gradient(180deg,#1a1a2e,#111122)", border:"1px solid rgba(255,215,0,0.15)" }} />
+      <div style={{ width: Math.round(size*0.12), height: Math.round(size*0.065), borderRadius:"0 0 4px 4px", background:"linear-gradient(180deg,#9A7800,#C8A000)", boxShadow:"0 2px 8px rgba(0,0,0,0.4)" }} />
+      <div style={{ width: Math.round(size*0.195), height: Math.round(size*0.22), borderRadius:"0 0 8px 8px", background:"linear-gradient(180deg,#1a1a2e,#111122)", border:"1px solid rgba(255,215,0,0.15)" }} />
     </div>
   );
 }
 
 /* ── Small icon button ───────────────────────────────────────────── */
-function IconBtn({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick: () => void }) {
+function IconBtn({ label, icon, onClick, small }: { label: string; icon: React.ReactNode; onClick: () => void; small?: boolean }) {
   const [h, setH] = useState(false);
   return (
     <button
       onClick={onClick}
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
+      onTouchStart={() => setH(true)}
+      onTouchEnd={() => setH(false)}
       title={label}
       style={{
-        display:"flex", flexDirection:"column", alignItems:"center", gap:5,
-        padding:"14px 22px", borderRadius:14,
+        display:"flex", flexDirection:"column", alignItems:"center", gap: small ? 3 : 5,
+        padding: small ? "10px 14px" : "14px 22px", borderRadius:14,
         border:"1px solid rgba(255,255,255,0.13)",
         background: h ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
         color:"#fff", cursor:"pointer", outline:"none",
         transition:"background 0.15s, transform 0.12s",
         transform: h ? "translateY(-2px)" : "none",
         boxShadow: h ? "0 4px 18px rgba(0,0,0,0.35)" : "0 2px 8px rgba(0,0,0,0.25)",
+        WebkitTapHighlightColor: "transparent",
       }}
     >
-      <span style={{ fontSize:22 }}>{icon}</span>
-      <span style={{ fontSize:11, fontWeight:600, letterSpacing:1, color:"rgba(255,255,255,0.6)", fontFamily:"system-ui,sans-serif", textTransform:"uppercase" }}>{label}</span>
+      <span style={{ fontSize: small ? 18 : 22 }}>{icon}</span>
+      <span style={{ fontSize: small ? 9 : 11, fontWeight:600, letterSpacing:1, color:"rgba(255,255,255,0.6)", fontFamily:"system-ui,sans-serif", textTransform:"uppercase" }}>{label}</span>
     </button>
   );
 }
@@ -189,21 +188,27 @@ function IconBtn({ label, icon, onClick }: { label: string; icon: React.ReactNod
 export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
   const [soundOn, setSoundOn] = useState(true);
   const { user } = useUser();
+  const { w, h } = useWindowSize();
+
   const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase().trim() ?? "";
   const isAdmin   = userEmail === ADMIN_EMAIL.toLowerCase();
 
+  // Responsive breakpoints
+  const isSmall  = w < 680;   // small mobile landscape (e.g. iPhone SE landscape)
+  const isTiny   = w < 500;   // very small
+
+  const titleSize    = isTiny ? 22 : isSmall ? 28 : 48;
+  const watchBtnSize = isTiny ? 110 : isSmall ? 140 : 188;
+  const gapSize      = isTiny ? 10 : isSmall ? 14 : 26;
+
   const handleSound = () => {
     setSoundOn((v) => !v);
-    /* The sound system uses the Web Audio context — suspending/resuming it
-       acts as a global mute. The AudioContext is created lazily on first
-       sound play, so we need to interact with it after it exists.         */
-    const w = window as any;
-    if (w.__audioCtx) {
-      if (w.__audioCtx.state === "running") w.__audioCtx.suspend();
-      else w.__audioCtx.resume();
+    const w2 = window as any;
+    if (w2.__audioCtx) {
+      if (w2.__audioCtx.state === "running") w2.__audioCtx.suspend();
+      else w2.__audioCtx.resume();
     } else {
-      /* Mark preference for when the context is created later */
-      w.__audioMuted = soundOn; // will be muted next create
+      w2.__audioMuted = soundOn;
     }
   };
 
@@ -211,32 +216,44 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
     <div style={{ position:"absolute", inset:0, zIndex:20, overflow:"hidden", fontFamily:"system-ui,sans-serif" }}>
       <BgCanvas />
 
-      {/* Extra halo glows */}
       <div style={{ position:"fixed", top:"20%", right:"30%", width:500, height:500, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,100,50,0.07) 0%, transparent 70%)", pointerEvents:"none", zIndex:1 }} />
       <div style={{ position:"fixed", bottom:"10%", left:"10%", width:300, height:300, borderRadius:"50%", background:"radial-gradient(circle, rgba(40,80,255,0.08) 0%, transparent 70%)", pointerEvents:"none", zIndex:1 }} />
 
-      {/* Main layout */}
+      {/* Main layout — row on normal, tighter on small */}
       <div style={{
         position:"relative", zIndex:2,
         width:"100%", height:"100%",
         display:"flex", alignItems:"center", justifyContent:"center",
-        gap:0, padding:"0 16px",
+        gap:0, padding: isTiny ? "0 6px" : "0 16px",
+        boxSizing:"border-box",
       }}>
 
-        {/* ── Left: Dancing character ── */}
-        <div style={{ flex:"0 0 30%", height:"100%", position:"relative", minWidth:0 }}>
-          {/* Spotlight underneath character */}
-          <div style={{ position:"absolute", bottom:"18%", left:"50%", transform:"translateX(-50%)", width:180, height:40, borderRadius:"50%", background:"rgba(255,215,0,0.10)", filter:"blur(12px)", zIndex:1, pointerEvents:"none" }} />
-          <DancingCharacterView />
-        </div>
+        {/* ── Left: Dancing character — hide on very tiny screens ── */}
+        {!isTiny && (
+          <div style={{
+            flex: isSmall ? "0 0 28%" : "0 0 30%",
+            height:"100%", position:"relative", minWidth:0,
+            overflow:"hidden",
+          }}>
+            <div style={{ position:"absolute", bottom:"18%", left:"50%", transform:"translateX(-50%)", width:isSmall?120:180, height:40, borderRadius:"50%", background:"rgba(255,215,0,0.10)", filter:"blur(12px)", zIndex:1, pointerEvents:"none" }} />
+            <DancingCharacterView />
+          </div>
+        )}
 
         {/* ── Right: Controls ── */}
-        <div style={{ flex:"0 0 52%", display:"flex", flexDirection:"column", alignItems:"center", gap:26, paddingRight:"4%" }}>
+        <div style={{
+          flex: isTiny ? "1" : isSmall ? "0 0 68%" : "0 0 52%",
+          display:"flex", flexDirection:"column", alignItems:"center",
+          gap: gapSize,
+          paddingRight: isTiny ? 0 : isSmall ? "2%" : "4%",
+          maxHeight: "100%",
+          overflow: "hidden",
+        }}>
 
           {/* Title */}
           <div style={{ textAlign:"center" }}>
             <div style={{
-              fontSize:48, fontWeight:900, color:"#fff", letterSpacing:"-1px",
+              fontSize: titleSize, fontWeight:900, color:"#fff", letterSpacing:"-1px",
               textShadow:"0 0 40px rgba(255,215,0,0.5), 0 2px 0 rgba(0,0,0,0.5)",
               lineHeight:1.1,
             }}>
@@ -244,36 +261,39 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
               <span style={{ color:"#FFD700" }}>RUNNER</span>
             </div>
             {highScore > 0 && (
-              <div style={{ marginTop:10, display:"inline-flex", alignItems:"center", gap:8, background:"rgba(255,215,0,0.10)", border:"1px solid rgba(255,215,0,0.25)", borderRadius:50, padding:"6px 18px" }}>
-                <span style={{ fontSize:16 }}>🏆</span>
-                <span style={{ color:"#FFD700", fontSize:14, fontWeight:700 }}>Best: {highScore.toLocaleString()}</span>
+              <div style={{ marginTop: isSmall ? 6 : 10, display:"inline-flex", alignItems:"center", gap:8, background:"rgba(255,215,0,0.10)", border:"1px solid rgba(255,215,0,0.25)", borderRadius:50, padding: isSmall ? "4px 12px" : "6px 18px" }}>
+                <span style={{ fontSize: isSmall ? 12 : 16 }}>🏆</span>
+                <span style={{ color:"#FFD700", fontSize: isSmall ? 11 : 14, fontWeight:700 }}>Best: {highScore.toLocaleString()}</span>
               </div>
             )}
           </div>
 
           {/* Big watch play button */}
-          <WatchPlayButton onStart={onStart} />
+          <WatchPlayButton onStart={onStart} size={watchBtnSize} />
 
           {/* RANKS button */}
           <LeaderboardPanel />
 
           {/* Sub icon buttons */}
-          <div style={{ display:"flex", gap:12 }}>
+          <div style={{ display:"flex", gap: isSmall ? 8 : 12 }}>
             <IconBtn
               label="Home"
               icon="🏠"
               onClick={() => window.location.reload()}
+              small={isSmall}
             />
             <IconBtn
               label={soundOn ? "Sound On" : "Sound Off"}
               icon={soundOn ? "🔊" : "🔇"}
               onClick={handleSound}
+              small={isSmall}
             />
             {isAdmin && (
               <IconBtn
                 label="Admin"
                 icon="⚙️"
                 onClick={() => { window.location.href = "/admin"; }}
+                small={isSmall}
               />
             )}
           </div>

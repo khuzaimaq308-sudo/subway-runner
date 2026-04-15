@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useUser, useAuth } from "@clerk/react";
@@ -18,25 +18,60 @@ import { MenuScreen } from "@/components/ui/MenuScreen";
 import { GameOverScreen } from "@/components/ui/GameOverScreen";
 import { WatchesCornerPanel } from "@/components/ui/WatchesCornerPanel";
 
+// ── Portrait overlay ───────────────────────────────────────────────────────
+function PortraitOverlay() {
+  const [portrait, setPortrait] = useState(() => window.innerWidth < window.innerHeight);
+  useEffect(() => {
+    const check = () => setPortrait(window.innerWidth < window.innerHeight);
+    window.addEventListener("resize", check);
+    window.addEventListener("orientationchange", check);
+    return () => { window.removeEventListener("resize", check); window.removeEventListener("orientationchange", check); };
+  }, []);
+  if (!portrait) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 99999,
+      background: "#060614",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      fontFamily: "system-ui,sans-serif",
+    }}>
+      <div style={{ fontSize: 72, animation: "spin90 1.2s ease-in-out infinite alternate" }}>📱</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: "#FFD700", marginTop: 24, textAlign: "center", padding: "0 32px" }}>
+        Phone Ghuma Lo!
+      </div>
+      <div style={{ fontSize: 14, color: "rgba(255,215,0,0.55)", marginTop: 10, textAlign: "center", lineHeight: 1.6, padding: "0 40px" }}>
+        Subway Runner landscape mode mein khelta hai.<br />Please apna phone sideways karo.
+      </div>
+      <style>{`@keyframes spin90{0%{transform:rotate(-15deg)}100%{transform:rotate(15deg)}}`}</style>
+    </div>
+  );
+}
+
 // ── Camera ────────────────────────────────────────────────────────────────
 function CameraRig({ isJumping, speed, isDancing, isOnTrain, isJetpack }: { isJumping: boolean; speed: number; isDancing: boolean; isOnTrain: boolean; isJetpack: boolean }) {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const camYRef    = useRef(4.4);
   const camZRef    = useRef(4.4);
   const camXRef    = useRef(0);
   const lookYRef   = useRef(0.5);
   const lookZRef   = useRef(-10);
+  const baseFovRef = useRef(72);
 
   useEffect(() => {
+    const aspect = size.width / size.height;
+    // Wider FOV for narrow screens so all 3 lanes stay visible
+    baseFovRef.current = aspect < 1.0 ? 105 : aspect < 1.3 ? 92 : aspect < 1.6 ? 80 : 72;
     camera.position.set(0, 4.4, 4.4);
     const pc = camera as THREE.PerspectiveCamera;
-    pc.fov  = 72; pc.near = 0.1; pc.far = 1000;
+    pc.fov  = baseFovRef.current; pc.near = 0.1; pc.far = 1000;
     pc.updateProjectionMatrix();
     camera.lookAt(0, 0.5, -10);
-  }, [camera]);
+  }, [camera, size.width, size.height]);
 
   useFrame((_, delta) => {
     const smooth = Math.min(1, delta * 4);
+    const base   = baseFovRef.current;
 
     if (isDancing) {
       camYRef.current  += (1.6 - camYRef.current)   * smooth;
@@ -45,10 +80,9 @@ function CameraRig({ isJumping, speed, isDancing, isOnTrain, isJetpack }: { isJu
       lookYRef.current += (1.1 - lookYRef.current)  * smooth;
       lookZRef.current += (0   - lookZRef.current)  * smooth;
       const pc = camera as THREE.PerspectiveCamera;
-      pc.fov += (58 - pc.fov) * Math.min(1, delta * 3);
+      pc.fov += ((base - 14) - pc.fov) * Math.min(1, delta * 3);
       pc.updateProjectionMatrix();
     } else if (isJetpack) {
-      // Camera tracks player up (player is at Y=7) — closer than before
       camYRef.current  += (9.5 - camYRef.current)  * Math.min(1, delta * 3.5);
       camZRef.current  += (5.5 - camZRef.current)  * smooth;
       camXRef.current  += (0   - camXRef.current)  * smooth;
@@ -68,8 +102,8 @@ function CameraRig({ isJumping, speed, isDancing, isOnTrain, isJetpack }: { isJu
 
     if (!isDancing) {
       const pc = camera as THREE.PerspectiveCamera;
-      const targetFov = 72 + (speed - 8) * 0.5;
-      pc.fov += (Math.min(84, targetFov) - pc.fov) * Math.min(1, delta * 2);
+      const targetFov = base + (speed - 8) * 0.5;
+      pc.fov += (Math.min(base + 12, targetFov) - pc.fov) * Math.min(1, delta * 2);
       pc.updateProjectionMatrix();
     }
   });
@@ -408,6 +442,7 @@ export function Game() {
           <GameOverScreen score={score} highScore={highScore} coins={coins} onRestart={startGame} onMenu={goToMenu} />
         )}
       </div>
+      <PortraitOverlay />
     </WebGLCheck>
   );
 }
