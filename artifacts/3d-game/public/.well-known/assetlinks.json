@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.replit.character_dash.twa",
+        "sha256_cert_fingerprints": ["C6:74:9C:E1:A2:D5:32:6E:0A:E2:8A:1E:2F:F0:FD:6D:02:41:1A:42:BC:8C:1E:5C:2B:61:EC:FD:B5:EB:19:CE"]
+      }
+    }]
