@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "@clerk/react";
-import { DancingCharacterView } from "./DancingCharacterView";
 import { LeaderboardPanel } from "./LeaderboardPanel";
 
 const ADMIN_EMAIL = "khuzaimaq308@gmail.com";
@@ -228,21 +227,9 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
         boxSizing:"border-box",
       }}>
 
-        {/* ── Left: Dancing character — hide on very tiny screens ── */}
-        {!isTiny && (
-          <div style={{
-            flex: isSmall ? "0 0 28%" : "0 0 30%",
-            height:"100%", position:"relative", minWidth:0,
-            overflow:"hidden",
-          }}>
-            <div style={{ position:"absolute", bottom:"18%", left:"50%", transform:"translateX(-50%)", width:isSmall?120:180, height:40, borderRadius:"50%", background:"rgba(255,215,0,0.10)", filter:"blur(12px)", zIndex:1, pointerEvents:"none" }} />
-            <DancingCharacterView />
-          </div>
-        )}
-
-        {/* ── Right: Controls ── */}
+        {/* ── Controls ── */}
         <div style={{
-          flex: isTiny ? "1" : isSmall ? "0 0 68%" : "0 0 52%",
+          flex: "1",
           display:"flex", flexDirection:"column", alignItems:"center",
           gap: gapSize,
           paddingRight: isTiny ? 0 : isSmall ? "2%" : "4%",
