@@ -1,10 +1,9 @@
 import { useEffect, useRef } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, useClerk } from "@clerk/react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Game } from "@/pages/Game";
-import { LoginScreen } from "@/components/auth/LoginScreen";
 import { AdminPanel } from "@/pages/AdminPanel";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -42,16 +41,7 @@ function SignUpPage() {
 }
 
 function HomeRoute() {
-  return (
-    <>
-      <Show when="signed-in">
-        <Game />
-      </Show>
-      <Show when="signed-out">
-        <LoginScreen />
-      </Show>
-    </>
-  );
+  return <Game />;
 }
 
 function ClerkQueryClientCacheInvalidator() {
