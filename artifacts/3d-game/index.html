@@ -31,6 +31,20 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      // Lock orientation to landscape as early as possible (works in TWA/PWA)
+      (function() {
+        function lockLandscape() {
+          try {
+            if (screen.orientation && typeof screen.orientation.lock === "function") {
+              screen.orientation.lock("landscape").catch(function() {});
+            }
+          } catch(e) {}
+        }
+        lockLandscape();
+        document.addEventListener("DOMContentLoaded", lockLandscape);
+        window.addEventListener("load", lockLandscape);
+      })();
+
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
           navigator.serviceWorker.register("/sw.js").catch(() => {});
