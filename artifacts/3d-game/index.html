@@ -45,26 +45,16 @@
         window.addEventListener("load", lockLandscape);
       })();
 
-      // One-time aggressive cache purge to recover users from a stale broken bundle.
-      // Bump this key whenever you ship a major fix that needs all clients refreshed.
+      // Silently clean up any stale caches/service workers in the background.
+      // No reload — let the page render normally. The fresh bundle is already loading.
       (function() {
         try {
-          var PURGE_KEY = "sr_cache_purge_v3";
-          if (!localStorage.getItem(PURGE_KEY)) {
-            if ("caches" in window) {
-              caches.keys().then(function(keys) {
-                keys.forEach(function(k) { caches.delete(k); });
-              }).catch(function(){});
-            }
-            if ("serviceWorker" in navigator) {
-              navigator.serviceWorker.getRegistrations().then(function(regs) {
-                regs.forEach(function(r) { r.unregister(); });
-              }).catch(function(){});
-            }
-            localStorage.setItem(PURGE_KEY, "1");
-            // Reload once so the next load fetches the fresh entry point with no SW.
-            setTimeout(function() { location.reload(); }, 100);
-            return;
+          if ("caches" in window) {
+            caches.keys().then(function(keys) {
+              keys.forEach(function(k) {
+                if (k.indexOf("subway-runner-v3") === -1) caches.delete(k);
+              });
+            }).catch(function(){});
           }
         } catch(e) {}
 
