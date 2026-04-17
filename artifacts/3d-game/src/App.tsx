@@ -7,8 +7,8 @@ import { Game } from "@/pages/Game";
 import { AdminPanel } from "@/pages/AdminPanel";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-// Only use proxy URL in development — in production Clerk uses its own CDN directly
-const clerkProxyUrl = import.meta.env.DEV ? import.meta.env.VITE_CLERK_PROXY_URL : undefined;
+// Use a same-origin relative proxy path so it works in both dev and production
+const clerkProxyUrl = "/api/__clerk";
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function stripBase(path: string): string {
