@@ -407,7 +407,7 @@ export function Game() {
 
   return (
     <WebGLCheck>
-      <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#87CEEB" }}>
+      <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", background: "#87CEEB", position: "fixed", inset: 0 }}>
         <Canvas
           shadows={false}
           gl={{ antialias: false, powerPreference: "high-performance", depth: true }}

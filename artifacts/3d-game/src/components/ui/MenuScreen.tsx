@@ -196,9 +196,12 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
   const isSmall  = w < 680;   // small mobile landscape (e.g. iPhone SE landscape)
   const isTiny   = w < 500;   // very small
 
-  const titleSize    = isTiny ? 22 : isSmall ? 28 : 48;
-  const watchBtnSize = isTiny ? 110 : isSmall ? 140 : 188;
-  const gapSize      = isTiny ? 10 : isSmall ? 14 : 26;
+  // Watch sized to fit available height — landscape phones are short
+  const watchBtnSize = Math.min(
+    isTiny ? 100 : isSmall ? 130 : 170,
+    Math.round(h * 0.55),
+  );
+  const titleSize    = isTiny ? 18 : isSmall ? 22 : 30;
 
   const handleSound = () => {
     setSoundOn((v) => !v);
@@ -218,72 +221,75 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
       <div style={{ position:"fixed", top:"20%", right:"30%", width:500, height:500, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,100,50,0.07) 0%, transparent 70%)", pointerEvents:"none", zIndex:1 }} />
       <div style={{ position:"fixed", bottom:"10%", left:"10%", width:300, height:300, borderRadius:"50%", background:"radial-gradient(circle, rgba(40,80,255,0.08) 0%, transparent 70%)", pointerEvents:"none", zIndex:1 }} />
 
-      {/* Main layout — row on normal, tighter on small */}
+      {/* Title — top centered, compact */}
+      <div style={{
+        position:"absolute", top: isSmall ? 8 : 14, left:0, right:0,
+        textAlign:"center", zIndex:3, pointerEvents:"none",
+      }}>
+        <div style={{
+          fontSize: titleSize, fontWeight:900, color:"#fff", letterSpacing:"-0.5px",
+          textShadow:"0 0 30px rgba(255,215,0,0.5), 0 2px 0 rgba(0,0,0,0.5)",
+          lineHeight:1, display:"inline-block",
+        }}>
+          SUBWAY <span style={{ color:"#FFD700" }}>RUNNER</span>
+        </div>
+        {highScore > 0 && (
+          <div style={{ marginTop: 4, display:"flex", justifyContent:"center" }}>
+            <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:"rgba(255,215,0,0.10)", border:"1px solid rgba(255,215,0,0.25)", borderRadius:50, padding: "3px 10px" }}>
+              <span style={{ fontSize: 11 }}>🏆</span>
+              <span style={{ color:"#FFD700", fontSize: 11, fontWeight:700 }}>Best: {highScore.toLocaleString()}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main horizontal landscape layout: PLAY watch | RANKS | HOME/SOUND */}
       <div style={{
         position:"relative", zIndex:2,
         width:"100%", height:"100%",
-        display:"flex", alignItems:"center", justifyContent:"center",
-        gap:0, padding: isTiny ? "0 6px" : "0 16px",
+        display:"flex", flexDirection:"row",
+        alignItems:"center", justifyContent:"center",
+        gap: isTiny ? 18 : isSmall ? 28 : 44,
+        padding: isTiny ? "0 10px" : "0 20px",
         boxSizing:"border-box",
       }}>
 
-        {/* ── Controls ── */}
-        <div style={{
-          flex: "1",
-          display:"flex", flexDirection:"column", alignItems:"center",
-          gap: gapSize,
-          paddingRight: isTiny ? 0 : isSmall ? "2%" : "4%",
-          maxHeight: "100%",
-          overflow: "hidden",
-        }}>
-
-          {/* Title */}
-          <div style={{ textAlign:"center" }}>
-            <div style={{
-              fontSize: titleSize, fontWeight:900, color:"#fff", letterSpacing:"-1px",
-              textShadow:"0 0 40px rgba(255,215,0,0.5), 0 2px 0 rgba(0,0,0,0.5)",
-              lineHeight:1.1,
-            }}>
-              SUBWAY<br />
-              <span style={{ color:"#FFD700" }}>RUNNER</span>
-            </div>
-            {highScore > 0 && (
-              <div style={{ marginTop: isSmall ? 6 : 10, display:"inline-flex", alignItems:"center", gap:8, background:"rgba(255,215,0,0.10)", border:"1px solid rgba(255,215,0,0.25)", borderRadius:50, padding: isSmall ? "4px 12px" : "6px 18px" }}>
-                <span style={{ fontSize: isSmall ? 12 : 16 }}>🏆</span>
-                <span style={{ color:"#FFD700", fontSize: isSmall ? 11 : 14, fontWeight:700 }}>Best: {highScore.toLocaleString()}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Big watch play button */}
+        {/* ── PLAY watch button ── */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
           <WatchPlayButton onStart={onStart} size={watchBtnSize} />
+        </div>
 
-          {/* RANKS button */}
+        {/* ── RANKS button ── */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
           <LeaderboardPanel />
+        </div>
 
-          {/* Sub icon buttons */}
-          <div style={{ display:"flex", gap: isSmall ? 8 : 12 }}>
+        {/* ── HOME / SOUND / ADMIN icon buttons (column on right) ── */}
+        <div style={{
+          display:"flex", flexDirection:"column",
+          gap: isSmall ? 8 : 10,
+          alignItems:"center", justifyContent:"center",
+        }}>
+          <IconBtn
+            label="Home"
+            icon="🏠"
+            onClick={() => window.location.reload()}
+            small={true}
+          />
+          <IconBtn
+            label={soundOn ? "Sound" : "Mute"}
+            icon={soundOn ? "🔊" : "🔇"}
+            onClick={handleSound}
+            small={true}
+          />
+          {isAdmin && (
             <IconBtn
-              label="Home"
-              icon="🏠"
-              onClick={() => window.location.reload()}
-              small={isSmall}
+              label="Admin"
+              icon="⚙️"
+              onClick={() => { window.location.href = "/admin"; }}
+              small={true}
             />
-            <IconBtn
-              label={soundOn ? "Sound On" : "Sound Off"}
-              icon={soundOn ? "🔊" : "🔇"}
-              onClick={handleSound}
-              small={isSmall}
-            />
-            {isAdmin && (
-              <IconBtn
-                label="Admin"
-                icon="⚙️"
-                onClick={() => { window.location.href = "/admin"; }}
-                small={isSmall}
-              />
-            )}
-          </div>
+          )}
         </div>
       </div>
 
