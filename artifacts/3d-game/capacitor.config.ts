@@ -3,9 +3,9 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'app.replit.subwayrunner',
   appName: 'Subway Runner',
-  webDir: 'dist',
+  webDir: 'dist/public',
   server: {
-    url: 'https://character-dash-khuzaimaq308.replit.app',
+    url: 'https://character-dash.replit.app',
     cleartext: false,
     androidScheme: 'https',
   },

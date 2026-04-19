@@ -1,0 +1,78 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'artifacts/3d-game/**'
+      - '.github/workflows/build-android-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web assets
+        env:
+          PORT: '5173'
+          BASE_PATH: '/'
+          NODE_ENV: production
+        run: pnpm --filter @workspace/3d-game run build
+
+      - name: Capacitor sync
+        working-directory: artifacts/3d-game
+        run: npx cap sync android
+
+      - name: Make gradlew executable
+        working-directory: artifacts/3d-game/android
+        run: chmod +x ./gradlew
+
+      - name: Build debug APK
+        working-directory: artifacts/3d-game/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Build release APK (unsigned)
+        working-directory: artifacts/3d-game/android
+        run: ./gradlew assembleRelease --no-daemon
+        continue-on-error: true
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: subway-runner-debug-apk
+          path: artifacts/3d-game/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload release APK (if built)
+        uses: actions/upload-artifact@v4
+        with:
+          name: subway-runner-release-unsigned-apk
+          path: artifacts/3d-game/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: ignore
