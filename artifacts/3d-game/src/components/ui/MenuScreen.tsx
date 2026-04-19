@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "@clerk/react";
 import { LeaderboardPanel } from "./LeaderboardPanel";
+import { DancingCharacterView } from "./DancingCharacterView";
 
 const ADMIN_EMAIL = "khuzaimaq308@gmail.com";
 
@@ -224,7 +225,7 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
       {/* Title — elegantly positioned with gradient + glow */}
       <div style={{
         position:"absolute",
-        top: isSmall ? "12%" : "14%",
+        top: isSmall ? "20%" : "22%",
         left:0, right:0,
         textAlign:"center", zIndex:3, pointerEvents:"none",
       }}>
@@ -269,6 +270,16 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
         {/* ── PLAY watch button ── */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
           <WatchPlayButton onStart={onStart} size={watchBtnSize} />
+        </div>
+
+        {/* ── Dancing character (looped bubble dance) ── */}
+        <div style={{
+          width: isTiny ? 110 : isSmall ? 140 : 180,
+          height: isTiny ? 150 : isSmall ? 190 : 240,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          pointerEvents:"none", flexShrink:0,
+        }}>
+          <DancingCharacterView />
         </div>
 
         {/* ── RANKS button ── */}
