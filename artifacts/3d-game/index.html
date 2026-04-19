@@ -58,7 +58,15 @@
           }
         } catch(e) {}
 
-        if ("serviceWorker" in navigator) {
+        var isCapacitor = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+        if (isCapacitor && "serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(rs){
+            rs.forEach(function(r){ r.unregister(); });
+          }).catch(function(){});
+          if (window.caches && caches.keys) {
+            caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); }).catch(function(){});
+          }
+        } else if ("serviceWorker" in navigator) {
           window.addEventListener("load", function() {
             navigator.serviceWorker.register("/sw.js").catch(function(){});
           });
