@@ -50,7 +50,7 @@ const matYellowT = new THREE.MeshLambertMaterial({ color: 0xFFCC00 });
 const _txLoader = new THREE.TextureLoader();
 let _locoBase: THREE.Texture | null = null;
 const _BASE = import.meta.env.BASE_URL as string;
-function getLocoBase() { return _locoBase ??= _txLoader.load(`${_BASE}textures/loco_car.png`); }
+function getLocoBase() { return _locoBase ??= _txLoader.load(`${_BASE}textures/loco_car.jpg`); }
 let _locoMat: THREE.MeshLambertMaterial | null = null;
 function getLocoMat() { return _locoMat ??= new THREE.MeshLambertMaterial({ map: getLocoBase() }); }
 
