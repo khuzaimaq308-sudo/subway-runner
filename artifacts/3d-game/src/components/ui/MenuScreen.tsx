@@ -221,23 +221,35 @@ export function MenuScreen({ onStart, highScore }: MenuScreenProps) {
       <div style={{ position:"fixed", top:"20%", right:"30%", width:500, height:500, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,100,50,0.07) 0%, transparent 70%)", pointerEvents:"none", zIndex:1 }} />
       <div style={{ position:"fixed", bottom:"10%", left:"10%", width:300, height:300, borderRadius:"50%", background:"radial-gradient(circle, rgba(40,80,255,0.08) 0%, transparent 70%)", pointerEvents:"none", zIndex:1 }} />
 
-      {/* Title — top centered, compact */}
+      {/* Title — elegantly positioned with gradient + glow */}
       <div style={{
-        position:"absolute", top: isSmall ? 8 : 14, left:0, right:0,
+        position:"absolute",
+        top: isSmall ? "12%" : "14%",
+        left:0, right:0,
         textAlign:"center", zIndex:3, pointerEvents:"none",
       }}>
         <div style={{
-          fontSize: titleSize, fontWeight:900, color:"#fff", letterSpacing:"-0.5px",
-          textShadow:"0 0 30px rgba(255,215,0,0.5), 0 2px 0 rgba(0,0,0,0.5)",
-          lineHeight:1, display:"inline-block",
+          display:"inline-flex", alignItems:"center", justifyContent:"center", gap: isSmall ? 10 : 16,
         }}>
-          SUBWAY <span style={{ color:"#FFD700" }}>RUNNER</span>
+          <span style={{ height: 2, width: isSmall ? 28 : 50, background:"linear-gradient(90deg,transparent,rgba(255,215,0,0.6))" }} />
+          <div style={{
+            fontSize: titleSize, fontWeight:900, letterSpacing: isSmall ? 1.5 : 3,
+            lineHeight:1,
+            background: "linear-gradient(180deg,#FFF7C2 0%,#FFD700 45%,#C8930A 100%)",
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
+            textShadow:"0 0 24px rgba(255,215,0,0.45)",
+            filter:"drop-shadow(0 2px 0 rgba(0,0,0,0.55)) drop-shadow(0 0 18px rgba(255,180,40,0.35))",
+            fontFamily:"'Impact','Arial Black',system-ui,sans-serif",
+          }}>
+            SUBWAY&nbsp;RUNNER
+          </div>
+          <span style={{ height: 2, width: isSmall ? 28 : 50, background:"linear-gradient(90deg,rgba(255,215,0,0.6),transparent)" }} />
         </div>
         {highScore > 0 && (
-          <div style={{ marginTop: 4, display:"flex", justifyContent:"center" }}>
-            <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:"rgba(255,215,0,0.10)", border:"1px solid rgba(255,215,0,0.25)", borderRadius:50, padding: "3px 10px" }}>
+          <div style={{ marginTop: 8, display:"flex", justifyContent:"center" }}>
+            <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:"rgba(255,215,0,0.10)", border:"1px solid rgba(255,215,0,0.25)", borderRadius:50, padding: "3px 12px", backdropFilter:"blur(4px)" }}>
               <span style={{ fontSize: 11 }}>🏆</span>
-              <span style={{ color:"#FFD700", fontSize: 11, fontWeight:700 }}>Best: {highScore.toLocaleString()}</span>
+              <span style={{ color:"#FFD700", fontSize: 11, fontWeight:700, letterSpacing: 0.5 }}>Best: {highScore.toLocaleString()}</span>
             </div>
           </div>
         )}
